@@ -42,8 +42,8 @@ Built for the *Generative AI — Multi Agent* assignment (`HW_07_multi agent_2.p
 | Step | Scope | Status |
 | ---- | ----- | ------ |
 | **1** | Project skeleton, `SupportState`, domain schemas, abstract interfaces, config + provider factory, mock data & RAG corpus | ✅ done |
-| 2 | Triage agent using `with_structured_output` | ⏳ next |
-| 3 | Tools: subscription repository, refund gateway, RAG retriever | ⏳ |
+| **2** | Triage agent using `with_structured_output`, plus an offline keyword classifier and a provider-verification script | ✅ done |
+| 3 | Tools: subscription repository, refund gateway, RAG retriever | ⏳ next |
 | 4 | Billing & Technical specialist nodes | ⏳ |
 | 5 | Sentiment guardrail, `interrupt()`, checkpointer, graph assembly | ⏳ |
 | 6 | Deliverable notebook: 3 scenarios + `draw_mermaid_png()` graph image | ⏳ |
@@ -65,9 +65,16 @@ src/support_system/
 │   ├── billing.py       #   SubscriptionRepository / RefundGateway
 │   ├── nodes.py         #   SupportNode
 │   └── human.py         #   HumanReviewer
+├── agents/              # graph nodes
+│   ├── base.py          #   BaseSupportNode: naming, transcript lines, audit log
+│   └── triage.py        #   Node 1 — TriageNode (routing + loop guard)
+├── prompts/triage.py    # prompt text, kept out of the agent classes
 ├── infrastructure/      # concrete implementations of the interfaces
-│   └── llm/factory.py   #   OpenAI / Anthropic / Google via a pluggable registry
-└── config/settings.py   # the only module that reads os.environ
+│   ├── llm/factory.py   #   OpenAI / Anthropic / Google via a pluggable registry
+│   └── classification/  #   LLMIntentClassifier + offline KeywordIntentClassifier
+└── config/
+    ├── settings.py      # the only module that reads os.environ
+    └── dotenv.py        # tiny .env loader (no extra dependency)
 
 data/
 ├── knowledge_base/      # 6 markdown articles — the RAG corpus
@@ -115,8 +122,21 @@ print(settings.describe())                            # never prints the key
 Supported providers: `openai` (including any OpenAI-compatible gateway via
 `SUPPORT_BASE_URL`), `anthropic`, `google`.
 
+### Verify the provider before running anything
+
+```bash
+python scripts/verify_provider.py       # config -> endpoint -> structured output
+python scripts/verify_provider.py --list-models
+```
+
+The third check is the important one: the triage agent depends on
+`with_structured_output`, and not every OpenAI-compatible gateway implements
+JSON-schema / function calling. If that check fails, swap
+`LLMIntentClassifier` for `KeywordIntentClassifier` — they implement the same
+Protocol, so nothing else changes.
+
 ## Tests
 
 ```bash
-pytest -q        # 32 tests, offline, no API key
+pytest -q        # 62 tests, offline, no API key
 ```

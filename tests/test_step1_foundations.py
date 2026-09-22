@@ -232,7 +232,8 @@ def test_a_plain_object_can_satisfy_each_protocol(instance, protocol):
 # --------------------------------------------------------------------------- #
 
 
-def test_settings_pick_the_default_model_for_the_provider():
+def test_settings_pick_the_default_model_for_the_provider(monkeypatch):
+    monkeypatch.delenv("SUPPORT_MODEL", raising=False)
     assert Settings.from_env(provider="anthropic").model == "claude-opus-5"
     assert Settings.from_env(provider="openai").model == "gpt-4o-mini"
 
@@ -284,3 +285,21 @@ def test_mock_subscription_for_user_12345_is_expired():
     data = json.loads(settings.subscriptions_file.read_text(encoding="utf-8"))
     record = next(c for c in data["customers"] if c["user_id"] == "12345")
     assert record["status"] == "expired"
+
+
+def test_support_model_does_not_leak_across_an_explicit_provider_override(monkeypatch):
+    """A model id set for one provider must not be applied to another.
+
+    Regression: with SUPPORT_MODEL=gpt-4o-mini in .env, asking for the Anthropic
+    provider used to hand Anthropic an OpenAI model name.
+    """
+    monkeypatch.setenv("SUPPORT_PROVIDER", "openai")
+    monkeypatch.setenv("SUPPORT_MODEL", "gpt-4o-mini")
+    assert Settings.from_env().model == "gpt-4o-mini"
+    assert Settings.from_env(provider="anthropic").model == "claude-opus-5"
+    assert Settings.from_env(provider="google").model == "gemini-2.0-flash"
+
+
+def test_explicit_model_override_always_wins(monkeypatch):
+    monkeypatch.setenv("SUPPORT_MODEL", "gpt-4o-mini")
+    assert Settings.from_env(provider="anthropic", model="claude-sonnet-5").model == "claude-sonnet-5"

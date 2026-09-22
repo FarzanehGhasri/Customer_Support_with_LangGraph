@@ -97,13 +97,28 @@ class Settings:
         built-in default.  The notebook can therefore do
         ``Settings.from_env(provider="anthropic")`` without exporting anything.
         """
-        provider = str(overrides.pop("provider", os.getenv("SUPPORT_PROVIDER", "openai"))).lower()
+        # Pull `.env` into os.environ first so a checked-out project works with
+        # no shell setup. Already-exported variables keep priority.
+        from .dotenv import load_dotenv
+
+        load_dotenv()
+
+        env_provider = os.getenv("SUPPORT_PROVIDER", "openai").lower()
+        provider = str(overrides.pop("provider", env_provider)).lower()
         key_var = API_KEY_ENV_VARS.get(provider, "OPENAI_API_KEY")
+
+        # SUPPORT_MODEL is provider-agnostic in name but not in value: a model id
+        # configured for OpenAI is meaningless for Anthropic. So it only applies
+        # when we are actually using the provider it was configured alongside;
+        # an explicit provider override falls back to that provider's default.
+        env_model = os.getenv("SUPPORT_MODEL", "")
+        model = env_model if (env_model and provider == env_provider) else DEFAULT_MODELS.get(provider, "")
 
         values: dict[str, object] = {
             "provider": provider,
-            "model": os.getenv("SUPPORT_MODEL", DEFAULT_MODELS.get(provider, "")),
+            "model": model,
             "temperature": float(os.getenv("SUPPORT_TEMPERATURE", "0")),
+            # Always read the env var belonging to the *resolved* provider.
             "api_key": os.getenv(key_var, ""),
             "base_url": os.getenv("SUPPORT_BASE_URL", os.getenv("OPENAI_BASE_URL", "")),
             "request_timeout": int(os.getenv("SUPPORT_TIMEOUT", "60")),
