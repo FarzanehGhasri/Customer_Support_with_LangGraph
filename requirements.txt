@@ -1,0 +1,21 @@
+# --- Core graph + LLM framework -------------------------------------------
+langgraph>=0.2.50            # the state machine: nodes, edges, checkpointer, interrupt
+langchain-core>=0.3.0        # message types, Runnable, with_structured_output
+pydantic>=2.7                # structured LLM outputs and tool result contracts
+
+# --- Provider integrations -------------------------------------------------
+# Install ONLY the one you actually use; the factory imports them lazily.
+langchain-openai>=0.2.0      # provider="openai"  (also OpenAI-compatible proxies)
+# langchain-anthropic>=0.3.0 # provider="anthropic"
+# langchain-google-genai>=2.0 # provider="google"
+
+# --- Notebook deliverable --------------------------------------------------
+jupyter>=1.0
+ipykernel>=6.29
+
+# --- Graph image (draw_mermaid_png) ---------------------------------------
+# Rendering falls back to the public mermaid.ink API when pyppeteer is absent.
+# pyppeteer>=2.0             # uncomment to render the PNG fully offline
+
+# --- Development -----------------------------------------------------------
+pytest>=8.0

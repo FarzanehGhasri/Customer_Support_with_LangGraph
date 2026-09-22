@@ -1,0 +1,33 @@
+{
+  "_comment": "Mock customer records backing check_subscription_status(user_id). Scenario 2 of the assignment uses user_id 12345, whose subscription must come back as expired.",
+  "customers": [
+    {
+      "user_id": "12345",
+      "plan": "Pro Monthly",
+      "status": "expired",
+      "expires_on": "2025-08-14",
+      "auto_renew": false
+    },
+    {
+      "user_id": "67890",
+      "plan": "Team Annual",
+      "status": "active",
+      "expires_on": "2026-05-30",
+      "auto_renew": true
+    },
+    {
+      "user_id": "11111",
+      "plan": "Free Trial",
+      "status": "trial",
+      "expires_on": "2026-10-05",
+      "auto_renew": false
+    },
+    {
+      "user_id": "22222",
+      "plan": "Pro Annual",
+      "status": "cancelled",
+      "expires_on": "2026-01-31",
+      "auto_renew": false
+    }
+  ]
+}

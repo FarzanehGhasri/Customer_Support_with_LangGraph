@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Secrets
+.env
+
+# Notebook artefacts
+.ipynb_checkpoints/
+
+# LangGraph checkpoint database
+*.sqlite
+*.sqlite3
+
+# OS
+.DS_Store

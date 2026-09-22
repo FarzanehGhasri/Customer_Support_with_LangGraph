@@ -1,0 +1,34 @@
+{
+  "_comment": "Mock payment records backing process_refund(transaction_id). Refunds are approved only for transactions that are refundable and not already refunded.",
+  "transactions": [
+    {
+      "transaction_id": "TXN-1001",
+      "user_id": "12345",
+      "amount": 19.99,
+      "currency": "USD",
+      "charged_on": "2025-07-14",
+      "refundable": true,
+      "already_refunded": false
+    },
+    {
+      "transaction_id": "TXN-1002",
+      "user_id": "67890",
+      "amount": 199.0,
+      "currency": "USD",
+      "charged_on": "2025-05-30",
+      "refundable": false,
+      "already_refunded": false,
+      "reason": "outside the 30-day refund window"
+    },
+    {
+      "transaction_id": "TXN-1003",
+      "user_id": "22222",
+      "amount": 149.0,
+      "currency": "USD",
+      "charged_on": "2026-01-02",
+      "refundable": true,
+      "already_refunded": true,
+      "reason": "already refunded on 2026-01-20"
+    }
+  ]
+}
