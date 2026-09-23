@@ -7,10 +7,12 @@ details (which LLM vendor, which vector store, which database).
 
 from .billing import RefundGateway, SubscriptionRepository
 from .classification import IntentClassifier, SentimentAnalyzer
+from .composition import ResponseComposer
 from .embeddings import EmbeddingProvider
 from .human import HumanReviewer
 from .llm import ChatModelProvider
 from .nodes import SupportNode
+from .planning import BillingPlanner
 from .retrieval import KnowledgeRetriever
 
 __all__ = [
@@ -22,5 +24,7 @@ __all__ = [
     "SubscriptionRepository",
     "RefundGateway",
     "SupportNode",
+    "ResponseComposer",
+    "BillingPlanner",
     "HumanReviewer",
 ]

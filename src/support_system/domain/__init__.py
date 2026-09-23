@@ -5,8 +5,9 @@ only on Pydantic.  Keeping it dependency-free means the business rules can be
 tested (and understood) without an API key.
 """
 
-from .enums import Department, NextStep, Sentiment
+from .enums import BillingAction, Department, NextStep, Sentiment
 from .schemas import (
+    BillingPlan,
     HumanDecision,
     KnowledgeSnippet,
     RefundReceipt,
@@ -22,6 +23,8 @@ __all__ = [
     "NextStep",
     "Sentiment",
     "TriageDecision",
+    "BillingPlan",
+    "BillingAction",
     "SentimentAssessment",
     "SubscriptionStatus",
     "RefundReceipt",

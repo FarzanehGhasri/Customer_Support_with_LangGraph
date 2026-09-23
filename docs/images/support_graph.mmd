@@ -1,0 +1,34 @@
+---
+config:
+  flowchart:
+    curve: linear
+---
+graph TD;
+	__start__([<p>__start__</p>]):::first
+	triage(triage)
+	billing(billing)
+	technical(technical)
+	general(general)
+	guardrail(guardrail)
+	human_review(human_review<hr/><small><em>__interrupt = before</em></small>)
+	__end__([<p>__end__</p>]):::last
+	__start__ --> triage;
+	billing -.-> __end__;
+	billing -.-> guardrail;
+	billing -.-> triage;
+	general -.-> __end__;
+	general -.-> guardrail;
+	general -.-> triage;
+	guardrail -.-> __end__;
+	guardrail -.-> human_review;
+	technical -.-> __end__;
+	technical -.-> guardrail;
+	technical -.-> triage;
+	triage -.-> __end__;
+	triage -.-> billing;
+	triage -.-> general;
+	triage -.-> technical;
+	human_review --> __end__;
+	classDef default fill:#f2f0ff,line-height:1.2
+	classDef first fill-opacity:0
+	classDef last fill:#bfb6fc

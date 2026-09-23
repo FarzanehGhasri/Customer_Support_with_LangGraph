@@ -22,7 +22,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from .enums import Department, Sentiment
+from .enums import BillingAction, Department, Sentiment
 
 # --------------------------------------------------------------------------- #
 # 1. LLM output schemas (used with ``with_structured_output``)
@@ -194,3 +194,36 @@ class HumanDecision(BaseModel):
         if self.approved:
             return draft
         return self.replacement_response or draft
+
+
+# --------------------------------------------------------------------------- #
+# 4. Specialist planning schema
+# --------------------------------------------------------------------------- #
+
+
+class BillingPlan(BaseModel):
+    """Structured decision of the billing specialist.
+
+    The specialist chooses an action with ``with_structured_output`` and the
+    node then executes the matching tool. Routing the choice through a schema
+    rather than through free-text tool calling means we depend on exactly one
+    model capability across the whole project -- useful when the endpoint is an
+    OpenAI-compatible gateway whose function-calling support is unknown.
+    """
+
+    action: BillingAction = Field(
+        description=(
+            "check_subscription: customer asks about their plan/subscription. "
+            "process_refund: customer explicitly asks for a refund and gave a "
+            "transaction id. answer_directly: billing question needing no lookup. "
+            "return_to_triage: the message is not about billing at all."
+        )
+    )
+    argument: str = Field(
+        default="",
+        description=(
+            "The account id for check_subscription, or the transaction id for "
+            "process_refund. Empty for the other actions. Never invent a value."
+        ),
+    )
+    reasoning: str = Field(default="", description="One short sentence of justification.")

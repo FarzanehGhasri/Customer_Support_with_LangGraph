@@ -1,5 +1,24 @@
 """Prompt templates, kept out of the agent classes so they can be tuned freely."""
 
+from .specialists import (
+    BILLING_ANSWER_PROMPT,
+    BILLING_PLAN_PROMPT,
+    GENERAL_ANSWER_PROMPT,
+    TECHNICAL_ANSWER_PROMPT,
+    TECHNICAL_NO_ANSWER_PROMPT,
+)
+from .guardrail import SENTIMENT_SYSTEM_PROMPT, SENTIMENT_USER_PROMPT
 from .triage import TRIAGE_SYSTEM_PROMPT, TRIAGE_USER_PROMPT, build_history_block
 
-__all__ = ["TRIAGE_SYSTEM_PROMPT", "TRIAGE_USER_PROMPT", "build_history_block"]
+__all__ = [
+    "TRIAGE_SYSTEM_PROMPT",
+    "TRIAGE_USER_PROMPT",
+    "build_history_block",
+    "BILLING_PLAN_PROMPT",
+    "BILLING_ANSWER_PROMPT",
+    "TECHNICAL_ANSWER_PROMPT",
+    "TECHNICAL_NO_ANSWER_PROMPT",
+    "GENERAL_ANSWER_PROMPT",
+    "SENTIMENT_SYSTEM_PROMPT",
+    "SENTIMENT_USER_PROMPT",
+]

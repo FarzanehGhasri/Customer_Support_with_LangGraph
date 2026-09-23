@@ -86,3 +86,22 @@ class NextStep(str, Enum):
             Department.TRIAGE: cls.TRIAGE,
         }
         return mapping[department]
+
+
+class BillingAction(str, Enum):
+    """What the billing specialist has decided to do with a request.
+
+    Lives here rather than beside the schema that uses it, so that every closed
+    vocabulary in the project has exactly one home.
+    """
+
+    CHECK_SUBSCRIPTION = "check_subscription"
+    PROCESS_REFUND = "process_refund"
+    ANSWER_DIRECTLY = "answer_directly"
+    #: The spec's requirement that a specialist bounce an off-topic request back.
+    RETURN_TO_TRIAGE = "return_to_triage"
+
+    @property
+    def needs_argument(self) -> bool:
+        """True when the action cannot run without an id."""
+        return self in (BillingAction.CHECK_SUBSCRIPTION, BillingAction.PROCESS_REFUND)
