@@ -226,3 +226,84 @@ def test_application_runs_offline_without_credentials():
     app = build_application(Settings(provider="openai", api_key=""))
     assert app.offline is True
     assert app.run("hello", thread_id="nokey")["final_response"]
+
+
+# --------------------------------------------------------------------------- #
+# Mode detection -- regression for a bug found by executing the notebook
+# --------------------------------------------------------------------------- #
+
+
+def test_probe_reports_a_missing_key():
+    from support_system.config import Settings
+    from support_system.infrastructure.llm import probe_provider
+
+    ok, reason = probe_provider(Settings(provider="openai", api_key=""))
+    assert ok is False and "OPENAI_API_KEY" in reason
+
+
+def test_probe_reports_an_unknown_provider():
+    from support_system.config import Settings
+    from support_system.infrastructure.llm import probe_provider
+
+    ok, reason = probe_provider(Settings(provider="acme", api_key="dummy"))
+    assert ok is False and reason
+
+
+def test_an_unreachable_endpoint_forces_offline_mode(monkeypatch):
+    """Holding a key must not be mistaken for being able to use the model.
+
+    Regression: the notebook ran "live" against an unreachable endpoint. Every
+    component degraded quietly, so the graph completed and answered all three
+    scenarios wrongly instead of failing honestly.
+    """
+    from support_system.config import Settings
+    from support_system.graph import application as application_module
+
+    monkeypatch.setattr(
+        application_module, "probe_provider",
+        lambda settings, **kwargs: (False, "ConnectionError: unreachable"),
+    )
+    app = build_application(Settings(provider="openai", api_key="sk-looks-real"))
+    assert app.offline is True
+    assert "unreachable" in app.offline_reason
+    # ...and the fallback must actually work, not merely be selected.
+    state = app.run("How can I reset my password?", user_id="1", thread_id="probe")
+    assert state["department"] == Department.TECHNICAL
+    assert "Forgot password" in state["final_response"]
+
+
+def test_a_reachable_endpoint_selects_live_components(monkeypatch):
+    from support_system.config import Settings
+    from support_system.graph import application as application_module
+    from support_system.infrastructure.classification import LLMIntentClassifier
+
+    monkeypatch.setattr(
+        application_module, "probe_provider", lambda settings, **kwargs: (True, "")
+    )
+    app = build_application(Settings(provider="openai", api_key="sk-looks-real"))
+    assert app.offline is False and app.offline_reason == ""
+
+
+def test_probe_can_be_skipped(monkeypatch):
+    """probe=False must not make a call -- used when the mode is already known."""
+    from support_system.config import Settings
+    from support_system.graph import application as application_module
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("probe_provider must not be called when probe=False")
+
+    monkeypatch.setattr(application_module, "probe_provider", _boom)
+    app = build_application(Settings(provider="openai", api_key="sk-x"), probe=False)
+    assert app.offline is False
+
+
+def test_forced_offline_skips_the_probe(monkeypatch):
+    from support_system.config import Settings
+    from support_system.graph import application as application_module
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("probe_provider must not be called when force_offline=True")
+
+    monkeypatch.setattr(application_module, "probe_provider", _boom)
+    app = build_application(Settings(api_key="sk-x"), force_offline=True)
+    assert app.offline is True and app.offline_reason == "forced by the caller"

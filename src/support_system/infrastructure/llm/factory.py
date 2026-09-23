@@ -225,3 +225,53 @@ class LangChainEmbeddingProvider:
 
     def embed_query(self, text: str) -> list[float]:
         return self._get().embed_query(text)
+
+
+# --------------------------------------------------------------------------- #
+# Reachability probe
+# --------------------------------------------------------------------------- #
+
+
+def probe_provider(settings: Settings, *, timeout: int = 15) -> tuple[bool, str]:
+    """Check that the configured model can actually be reached and used.
+
+    Why this exists
+    ---------------
+    Every component in this project degrades gracefully when a model call
+    fails -- the classifier falls back, the composer returns the verified tool
+    output, and so on. That is the right behaviour in production, but it makes
+    a *misconfigured* system look like a working one: the graph completes, every
+    answer is wrong, and nothing raises.
+
+    Holding an API key is therefore not evidence that the model is usable. This
+    probe makes one small, cheap call and reports the truth, so the caller can
+    choose the deterministic components deliberately instead of discovering the
+    problem in its output.
+
+    Returns:
+        ``(ok, reason)`` -- ``reason`` is empty on success, otherwise a short
+        explanation suitable for printing.
+    """
+    if not settings.has_credentials:
+        return False, f"no API key ({settings.api_key_env_var} is not set)"
+
+    try:
+        model = LangChainModelProvider(settings).get_chat_model()
+    except Exception as exc:  # noqa: BLE001
+        return False, f"could not build the model: {type(exc).__name__}: {exc}"
+
+    try:
+        # Deliberately tiny: one token of output is enough to prove the
+        # endpoint, the key and the model name are all valid.
+        response = model.invoke(
+            [("human", "Reply with the single word: ok")],
+            config={"max_tokens": 5, "timeout": timeout},
+        )
+    except Exception as exc:  # noqa: BLE001
+        detail = str(exc).strip().splitlines()[0][:160]
+        return False, f"{type(exc).__name__}: {detail}"
+
+    content = getattr(response, "content", "")
+    if not str(content).strip():
+        return False, "the endpoint answered with empty content"
+    return True, ""

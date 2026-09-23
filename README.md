@@ -43,10 +43,10 @@ Built for the *Generative AI — Multi Agent* assignment (`HW_07_multi agent_2.p
 | ---- | ----- | ------ |
 | **1** | Project skeleton, `SupportState`, domain schemas, abstract interfaces, config + provider factory, mock data & RAG corpus | ✅ done |
 | **2** | Triage agent using `with_structured_output`, plus an offline keyword classifier and a provider-verification script | ✅ done |
-| 3 | Tools: subscription repository, refund gateway, RAG retriever | ⏳ next |
-| 4 | Billing & Technical specialist nodes | ⏳ |
-| 5 | Sentiment guardrail, `interrupt()`, checkpointer, graph assembly | ⏳ |
-| 6 | Deliverable notebook: 3 scenarios + `draw_mermaid_png()` graph image | ⏳ |
+| **3** | Tools: subscription repository, refund gateway, RAG retriever (TF-IDF + embeddings) | ✅ done |
+| **4** | Billing, Technical and General specialist nodes | ✅ done |
+| **5** | Sentiment guardrail, checkpointer, `interrupt`, `update_state`, graph assembly | ✅ done |
+| **6** | Deliverable notebook: 3 scenarios + graph image | ✅ done |
 
 ---
 
@@ -67,14 +67,30 @@ src/support_system/
 │   └── human.py         #   HumanReviewer
 ├── agents/              # graph nodes
 │   ├── base.py          #   BaseSupportNode: naming, transcript lines, audit log
-│   └── triage.py        #   Node 1 — TriageNode (routing + loop guard)
-├── prompts/triage.py    # prompt text, kept out of the agent classes
+│   ├── triage.py        #   Node 1 — routing + loop guard
+│   ├── billing.py       #   Node 2 — plan → execute → phrase, bounce-back rule
+│   ├── technical.py     #   Node 3 — RAG, refuses to hallucinate
+│   ├── general.py       #   greetings and everything else
+│   └── guardrail.py     #   Node 4 — sentiment gate + human review
+├── tools/definitions.py # the spec's 3 tools as LangChain StructuredTools
+├── prompts/             # prompt text, kept out of the agent classes
 ├── infrastructure/      # concrete implementations of the interfaces
-│   ├── llm/factory.py   #   OpenAI / Anthropic / Google via a pluggable registry
-│   └── classification/  #   LLMIntentClassifier + offline KeywordIntentClassifier
+│   ├── llm/factory.py   #   provider registry + reachability probe
+│   ├── classification/  #   intent + sentiment, LLM and offline variants
+│   ├── retrieval/       #   TF-IDF and embedding retrievers
+│   ├── billing/         #   JSON subscription store, mock refund gateway
+│   ├── composition/     #   answer phrasing, LLM and template variants
+│   ├── planning/        #   billing action planners
+│   └── human/           #   scripted / console / auto reviewers
+├── graph/
+│   ├── builder.py       # nodes, edges, checkpointer, interrupt_before
+│   └── application.py   # composition root — the only module wiring concretes
 └── config/
     ├── settings.py      # the only module that reads os.environ
     └── dotenv.py        # tiny .env loader (no extra dependency)
+
+notebooks/customer_support_langgraph.ipynb   # ← the deliverable
+docs/images/support_graph.{mmd,txt,png}      # the generated graph diagram
 
 data/
 ├── knowledge_base/      # 6 markdown articles — the RAG corpus
@@ -138,5 +154,24 @@ Protocol, so nothing else changes.
 ## Tests
 
 ```bash
-pytest -q        # 62 tests, offline, no API key
+pytest -q        # 158 tests, offline, no API key
 ```
+
+## Running it
+
+```bash
+jupyter lab notebooks/customer_support_langgraph.ipynb
+python scripts/render_graph.py        # regenerate the graph image
+```
+
+### Live vs. offline
+
+`build_application()` makes one tiny probe call at start-up and falls back to
+deterministic components if the model is unreachable — **visibly**, reporting why.
+
+This matters more than it looks. Every component here degrades gracefully on a failed
+model call, which is right in production but means a misconfigured endpoint produces a
+system that runs to completion and answers *everything* wrongly. Holding an API key is
+not evidence that the model works; the probe is. In offline mode answers come from the
+tools and the knowledge base instead of a model — unpolished, but still true — so the
+notebook runs for a grader with no key.

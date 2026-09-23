@@ -36,7 +36,11 @@ from ..infrastructure.classification import (
 )
 from ..infrastructure.composition import LLMResponseComposer, TemplateResponseComposer
 from ..infrastructure.planning import LLMBillingPlanner, RuleBasedBillingPlanner
-from ..infrastructure.llm import LangChainEmbeddingProvider, LangChainModelProvider
+from ..infrastructure.llm import (
+    LangChainEmbeddingProvider,
+    LangChainModelProvider,
+    probe_provider,
+)
 from ..infrastructure.retrieval import EmbeddingKnowledgeRetriever, KeywordKnowledgeRetriever
 from .builder import build_support_graph
 
@@ -57,6 +61,8 @@ class SupportApplication:
     repository: Any
     gateway: Any
     offline: bool
+    #: Why the system is offline, if it is. Empty when running live.
+    offline_reason: str = ""
 
     # ------------------------------------------------------------------ #
     def run(
@@ -116,6 +122,7 @@ def build_application(
     force_offline: bool = False,
     reviewer: Any | None = None,
     interrupt_before_human: bool = True,
+    probe: bool = True,
 ) -> SupportApplication:
     """Assemble the whole system.
 
@@ -125,14 +132,31 @@ def build_application(
             Handy for a reproducible demo run or for testing.
         reviewer: Optional :class:`HumanReviewer` consulted after an interrupt.
         interrupt_before_human: Whether to pause for a human on escalation.
+        probe: Verify the model is actually reachable before choosing the live
+            components. Leave this on. Because every component degrades quietly
+            on failure, an unreachable endpoint otherwise produces a system that
+            runs to completion and answers every question wrongly -- which is
+            far harder to notice than an honest fallback. One tiny call at
+            start-up buys that certainty.
     """
     settings = settings or Settings.from_env()
-    offline = force_offline or not settings.has_credentials
+
+    offline_reason = ""
+    if force_offline:
+        offline, offline_reason = True, "forced by the caller"
+    elif not settings.has_credentials:
+        offline, offline_reason = True, f"no {settings.api_key_env_var}"
+    elif probe:
+        reachable, why = probe_provider(settings)
+        offline, offline_reason = (not reachable), ("" if reachable else why)
+    else:
+        offline = False
+
     if offline:
         logger.warning(
             "Running OFFLINE (%s). Deterministic classifiers and keyword retrieval "
             "are in use; no API calls will be made.",
-            "forced" if force_offline else f"no {settings.api_key_env_var}",
+            offline_reason,
         )
 
     provider = LangChainModelProvider(settings)
@@ -185,4 +209,5 @@ def build_application(
         repository=repository,
         gateway=gateway,
         offline=offline,
+        offline_reason=offline_reason,
     )
