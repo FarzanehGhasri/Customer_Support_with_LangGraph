@@ -34,6 +34,12 @@ DEFAULT_MODELS: Mapping[str, str] = {
     "google": "gemini-2.0-flash",
 }
 
+#: Default embedding model per provider, used by the RAG retriever.
+DEFAULT_EMBEDDING_MODELS: Mapping[str, str] = {
+    "openai": "text-embedding-3-small",
+    "google": "models/text-embedding-004",
+}
+
 
 def _env_flag(name: str, default: bool = False) -> bool:
     """Parse a boolean-ish environment variable."""
@@ -62,6 +68,9 @@ class Settings:
     base_url: str = ""
     request_timeout: int = 60
     max_retries: int = 2
+    #: Embedding model for the vector-based knowledge retriever. Empty disables
+    #: embeddings and makes the retriever fall back to keyword search.
+    embedding_model: str = ""
 
     # --- Retrieval (RAG) -------------------------------------------------- #
     knowledge_base_dir: Path = field(default=PROJECT_ROOT / "data" / "knowledge_base")
@@ -121,6 +130,11 @@ class Settings:
             # Always read the env var belonging to the *resolved* provider.
             "api_key": os.getenv(key_var, ""),
             "base_url": os.getenv("SUPPORT_BASE_URL", os.getenv("OPENAI_BASE_URL", "")),
+            "embedding_model": (
+                os.getenv("SUPPORT_EMBEDDING_MODEL", "")
+                if provider == env_provider
+                else DEFAULT_EMBEDDING_MODELS.get(provider, "")
+            ) or DEFAULT_EMBEDDING_MODELS.get(provider, ""),
             "request_timeout": int(os.getenv("SUPPORT_TIMEOUT", "60")),
             "max_retries": int(os.getenv("SUPPORT_MAX_RETRIES", "2")),
             "retrieval_top_k": int(os.getenv("SUPPORT_TOP_K", "3")),

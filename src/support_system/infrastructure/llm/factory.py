@@ -145,3 +145,83 @@ class LangChainModelProvider:
         the same way.
         """
         return self.get_chat_model(temperature=temperature).with_structured_output(schema)
+
+
+# --------------------------------------------------------------------------- #
+# Embeddings -- a separate registry and a separate class, because embeddings
+# are a separate interface (see interfaces/embeddings.py).
+# --------------------------------------------------------------------------- #
+
+_EMBEDDING_REGISTRY: Dict[str, Callable[[Settings], Any]] = {}
+
+
+def register_embedding_provider(name: str) -> Callable[[Callable[[Settings], Any]], Callable[[Settings], Any]]:
+    """Decorator that adds an embedding builder to the registry."""
+
+    def decorator(builder: Callable[[Settings], Any]) -> Callable[[Settings], Any]:
+        _EMBEDDING_REGISTRY[name.lower()] = builder
+        return builder
+
+    return decorator
+
+
+@register_embedding_provider("openai")
+def _build_openai_embeddings(settings: Settings) -> Any:
+    from langchain_openai import OpenAIEmbeddings
+
+    kwargs: dict[str, Any] = {
+        "model": settings.embedding_model,
+        "api_key": settings.api_key,
+        "timeout": settings.request_timeout,
+    }
+    if settings.base_url:
+        kwargs["base_url"] = settings.base_url
+    return OpenAIEmbeddings(**kwargs)
+
+
+@register_embedding_provider("google")
+def _build_google_embeddings(settings: Settings) -> Any:
+    from langchain_google_genai import GoogleGenerativeAIEmbeddings
+
+    return GoogleGenerativeAIEmbeddings(
+        model=settings.embedding_model, google_api_key=settings.api_key
+    )
+
+
+class LangChainEmbeddingProvider:
+    """Adapter implementing the :class:`EmbeddingProvider` Protocol."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._model: Any = None
+
+    @property
+    def is_configured(self) -> bool:
+        """True when this provider can actually embed anything.
+
+        The graph builder checks this to decide between the vector retriever
+        and the keyword one, rather than discovering the problem mid-run.
+        """
+        return bool(
+            self._settings.embedding_model
+            and self._settings.has_credentials
+            and self._settings.provider.lower() in _EMBEDDING_REGISTRY
+        )
+
+    def _get(self) -> Any:
+        if self._model is None:
+            self._settings.require_credentials()
+            provider = self._settings.provider.lower()
+            if provider not in _EMBEDDING_REGISTRY:
+                raise ValueError(
+                    f"Provider '{provider}' has no embedding support registered. "
+                    f"Available: {', '.join(sorted(_EMBEDDING_REGISTRY))}."
+                )
+            self._model = _EMBEDDING_REGISTRY[provider](self._settings)
+        return self._model
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._get().embed_documents(texts)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._get().embed_query(text)

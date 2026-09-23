@@ -1,5 +1,17 @@
-"""LLM infrastructure: concrete providers for the ChatModelProvider Protocol."""
+"""LLM infrastructure: concrete providers for the chat and embedding Protocols."""
 
-from .factory import LangChainModelProvider, available_providers, register_provider
+from .factory import (
+    LangChainEmbeddingProvider,
+    LangChainModelProvider,
+    available_providers,
+    register_embedding_provider,
+    register_provider,
+)
 
-__all__ = ["LangChainModelProvider", "available_providers", "register_provider"]
+__all__ = [
+    "LangChainModelProvider",
+    "LangChainEmbeddingProvider",
+    "available_providers",
+    "register_provider",
+    "register_embedding_provider",
+]

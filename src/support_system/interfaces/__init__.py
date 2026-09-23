@@ -7,6 +7,7 @@ details (which LLM vendor, which vector store, which database).
 
 from .billing import RefundGateway, SubscriptionRepository
 from .classification import IntentClassifier, SentimentAnalyzer
+from .embeddings import EmbeddingProvider
 from .human import HumanReviewer
 from .llm import ChatModelProvider
 from .nodes import SupportNode
@@ -14,6 +15,7 @@ from .retrieval import KnowledgeRetriever
 
 __all__ = [
     "ChatModelProvider",
+    "EmbeddingProvider",
     "IntentClassifier",
     "SentimentAnalyzer",
     "KnowledgeRetriever",
