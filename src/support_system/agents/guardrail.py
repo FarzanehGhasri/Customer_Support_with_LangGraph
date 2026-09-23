@@ -137,3 +137,96 @@ class HumanReviewNode(BaseSupportNode):
             "next_step": NextStep.FINISH.value,
             "messages": [self.say("Escalated; awaiting a manager.")],
         }
+
+
+class InterruptingHumanReviewNode(BaseSupportNode):
+    """Human review implemented with LangGraph's **dynamic** ``interrupt()``.
+
+    The spec names ``graph.interrupt()`` explicitly, so this node exists
+    alongside :class:`HumanReviewNode` to cover that wording literally. The two
+    differ only in *where* the pause is declared:
+
+    ===================  ==========================================  =======================
+    mechanism            how it pauses                               how it resumes
+    ===================  ==========================================  =======================
+    ``HumanReviewNode``  ``interrupt_before=["human_review"]`` set    ``update_state(...)``
+                         when the graph is compiled                   then ``invoke(None)``
+    this class           ``interrupt(payload)`` called inside the     ``invoke(Command(
+                         node, at the moment the pause is needed      resume=...))``
+    ===================  ==========================================  =======================
+
+    The dynamic form is the more expressive one: the ``payload`` handed to
+    ``interrupt()`` is exactly what the support manager is shown -- the spec's
+    "این تابع باید بتواند وضعیت را بررسی کرده و پاسخ ایجنت را تایید یا رد کند" --
+    and whatever the manager sends back becomes the return value of that call.
+
+    Accepted resume values:
+
+    * ``str``   -- the manager's replacement reply;
+    * ``dict``  -- ``{"approved": bool, "reply": str, "note": str}``;
+    * ``True``  -- approve the agent's draft unchanged.
+    """
+
+    node_name = "human_review"
+
+    def __init__(self, interrupt_fn=None) -> None:
+        # Injectable so the node can be unit-tested without a running graph.
+        self._interrupt_fn = interrupt_fn
+
+    def _interrupt(self, payload: dict):
+        if self._interrupt_fn is not None:
+            return self._interrupt_fn(payload)
+        # Imported lazily: the module must stay importable without LangGraph.
+        from langgraph.types import interrupt
+
+        return interrupt(payload)
+
+    def handle(self, state) -> Mapping[str, Any]:
+        draft = state.get("draft_response", "")
+
+        # Everything the manager needs in order to decide, in one payload.
+        decision = self._interrupt(
+            {
+                "reason": "negative sentiment -- human approval required",
+                "user_id": state.get("user_id", ""),
+                "department": state.get("department", ""),
+                "sentiment": state.get("sentiment", ""),
+                "customer_message": self.current_message(state),
+                "agent_draft": draft,
+                "instructions": (
+                    "Reply with the text to send, or {'approved': true} to send the "
+                    "draft unchanged."
+                ),
+            }
+        )
+
+        approved, reply, note = self._parse(decision, draft)
+        logger.info("Human decision received: approved=%s", approved)
+
+        return {
+            "escalated": True,
+            "final_response": reply,
+            "next_step": NextStep.FINISH.value,
+            "messages": [
+                f"manager: {reply}",
+                self.say(
+                    f"Human decision: {'approved' if approved else 'overridden'}. {note}".strip()
+                ),
+            ],
+        }
+
+    @staticmethod
+    def _parse(decision: Any, draft: str) -> tuple[bool, str, str]:
+        """Normalise whatever the manager sent back into (approved, reply, note)."""
+        if isinstance(decision, dict):
+            approved = bool(decision.get("approved", False))
+            reply = str(decision.get("reply", "")).strip()
+            note = str(decision.get("note", ""))
+            return approved, (draft if approved and not reply else reply or draft), note
+        if decision is True:
+            return True, draft, "Draft approved unchanged."
+        text = str(decision).strip()
+        if not text:
+            # An empty resume value must not send an angry customer an empty reply.
+            return False, draft, "Empty decision; fell back to the draft."
+        return False, text, "Replaced by the manager."

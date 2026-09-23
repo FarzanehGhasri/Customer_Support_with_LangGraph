@@ -21,6 +21,7 @@ from ..agents import (
     BillingAgent,
     GeneralAgent,
     HumanReviewNode,
+    InterruptingHumanReviewNode,
     SentimentGuardrail,
     TechnicalAgent,
     TriageNode,
@@ -63,6 +64,9 @@ class SupportApplication:
     offline: bool
     #: Why the system is offline, if it is. Empty when running live.
     offline_reason: str = ""
+    #: "static" (interrupt_before + update_state) or "dynamic" (interrupt() +
+    #: Command(resume=...)). See build_application for the difference.
+    hitl_mode: str = "static"
 
     # ------------------------------------------------------------------ #
     def run(
@@ -115,6 +119,35 @@ class SupportApplication:
         self.graph.invoke(None, config={"configurable": {"thread_id": thread_id}})
         return self.state(thread_id)
 
+    def resume_with(self, decision: Any, *, thread_id: str = "default") -> SupportState:
+        """Resume a **dynamic** interrupt, sending the manager's decision in.
+
+        This is the counterpart of :meth:`inject_manager_reply`: with
+        ``hitl_mode="dynamic"`` the paused ``interrupt()`` call returns
+        ``decision``, so the manager's verdict travels as a value rather than
+        as a state write.
+
+        Args:
+            decision: The manager's reply as a string, ``True`` to approve the
+                draft unchanged, or ``{"approved": ..., "reply": ..., "note": ...}``.
+        """
+        from langgraph.types import Command
+
+        self.graph.invoke(
+            Command(resume=decision),
+            config={"configurable": {"thread_id": thread_id}},
+        )
+        return self.state(thread_id)
+
+    def pending_interrupt(self, thread_id: str = "default") -> Any:
+        """Payload the paused node handed to ``interrupt()``, if any.
+
+        This is what a real review UI would render for the support manager.
+        """
+        snapshot = self.graph.get_state({"configurable": {"thread_id": thread_id}})
+        interrupts = getattr(snapshot, "interrupts", ()) or ()
+        return interrupts[0].value if interrupts else None
+
 
 def build_application(
     settings: Settings | None = None,
@@ -123,6 +156,7 @@ def build_application(
     reviewer: Any | None = None,
     interrupt_before_human: bool = True,
     probe: bool = True,
+    hitl_mode: str = "static",
 ) -> SupportApplication:
     """Assemble the whole system.
 
@@ -132,6 +166,17 @@ def build_application(
             Handy for a reproducible demo run or for testing.
         reviewer: Optional :class:`HumanReviewer` consulted after an interrupt.
         interrupt_before_human: Whether to pause for a human on escalation.
+        hitl_mode: How the graph pauses for a human.
+
+            * ``"static"``  -- compile with ``interrupt_before=["human_review"]``;
+              the manager's answer arrives via ``update_state``. This is the flow
+              the assignment's scenario 3 describes.
+            * ``"dynamic"`` -- the review node calls ``interrupt(payload)`` itself
+              and is resumed with ``Command(resume=...)``. This is the
+              ``graph.interrupt()`` the assignment names in its Step 3 text.
+
+            Both satisfy the requirement to halt and wait for a human; the
+            notebook demonstrates each one.
         probe: Verify the model is actually reachable before choosing the live
             components. Leave this on. Because every component degrades quietly
             on failure, an unreachable endpoint otherwise produces a system that
@@ -191,6 +236,17 @@ def build_application(
     repository = JsonSubscriptionRepository(settings.subscriptions_file)
     gateway = MockRefundGateway(settings.transactions_file)
 
+    # --- human-in-the-loop mechanism ---------------------------------- #
+    if hitl_mode not in {"static", "dynamic"}:
+        raise ValueError(f"hitl_mode must be 'static' or 'dynamic', got {hitl_mode!r}")
+    if hitl_mode == "dynamic":
+        human_node: Any = InterruptingHumanReviewNode()
+        # The node pauses itself, so the graph must NOT also pause before it.
+        pause_before_node = False
+    else:
+        human_node = HumanReviewNode(reviewer)
+        pause_before_node = interrupt_before_human
+
     # --- nodes -------------------------------------------------------- #
     graph = build_support_graph(
         triage=TriageNode(classifier, max_attempts=settings.max_triage_attempts),
@@ -198,8 +254,8 @@ def build_application(
         technical=TechnicalAgent(retriever, composer, top_k=settings.retrieval_top_k),
         general=GeneralAgent(composer),
         guardrail=SentimentGuardrail(analyzer, enabled=settings.enable_human_in_the_loop),
-        human_review=HumanReviewNode(reviewer),
-        interrupt_before_human=interrupt_before_human,
+        human_review=human_node,
+        interrupt_before_human=pause_before_node,
     )
 
     return SupportApplication(
@@ -210,4 +266,5 @@ def build_application(
         gateway=gateway,
         offline=offline,
         offline_reason=offline_reason,
+        hitl_mode=hitl_mode,
     )

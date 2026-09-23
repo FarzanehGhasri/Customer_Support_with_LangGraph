@@ -3,7 +3,11 @@
 from .base import BaseSupportNode
 from .billing import BillingAgent
 from .general import GeneralAgent
-from .guardrail import HumanReviewNode, SentimentGuardrail
+from .guardrail import (
+    HumanReviewNode,
+    InterruptingHumanReviewNode,
+    SentimentGuardrail,
+)
 from .technical import TechnicalAgent
 from .triage import TriageNode
 
@@ -15,4 +19,5 @@ __all__ = [
     "GeneralAgent",
     "SentimentGuardrail",
     "HumanReviewNode",
+    "InterruptingHumanReviewNode",
 ]

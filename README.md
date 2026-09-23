@@ -45,7 +45,7 @@ Built for the *Generative AI — Multi Agent* assignment (`HW_07_multi agent_2.p
 | **2** | Triage agent using `with_structured_output`, plus an offline keyword classifier and a provider-verification script | ✅ done |
 | **3** | Tools: subscription repository, refund gateway, RAG retriever (TF-IDF + embeddings) | ✅ done |
 | **4** | Billing, Technical and General specialist nodes | ✅ done |
-| **5** | Sentiment guardrail, checkpointer, `interrupt`, `update_state`, graph assembly | ✅ done |
+| **5** | Sentiment guardrail, checkpointer, both interrupt forms, `update_state`, graph assembly | ✅ done |
 | **6** | Deliverable notebook: 3 scenarios + graph image | ✅ done |
 
 ---
@@ -154,8 +154,13 @@ Protocol, so nothing else changes.
 ## Tests
 
 ```bash
-pytest -q        # 158 tests, offline, no API key
+pytest -q                              # 193 tests, offline, no API key
+pytest -q tests/test_spec_compliance.py  # 35 checks, one per clause of the PDF
 ```
+
+`tests/test_spec_compliance.py` is organised by the assignment's own headings
+(Node 1–4, Step 1–3, the three scenarios, the delivery format), so a failure
+names the requirement it breaks.
 
 ## Running it
 
