@@ -27,7 +27,8 @@ from ..agents import (
     TriageNode,
 )
 from ..config.settings import Settings
-from ..domain.state import SupportState, initial_state
+from ..domain.enums import Awaiting
+from ..domain.state import SupportState, initial_state, turn_update
 from ..infrastructure.billing import JsonSubscriptionRepository, MockRefundGateway
 from ..infrastructure.classification import (
     KeywordIntentClassifier,
@@ -82,11 +83,35 @@ class SupportApplication:
         ``thread_id`` is the checkpointer's conversation key. Each scenario in
         the notebook uses its own, so a paused escalation can be resumed later
         without the runs interfering.
+
+        The first message on a thread seeds a full state; later messages send a
+        *partial* update instead. That distinction is what makes the
+        conversation continuous: a full state would overwrite ``awaiting`` and
+        the ``pending_*`` keys, so the specialist would forget that it had just
+        asked the customer a question.
         """
         config = {"configurable": {"thread_id": thread_id}}
-        state = initial_state(message, user_id, transaction_id=transaction_id)
-        self.graph.invoke(state, config=config)
+
+        if self._has_history(thread_id):
+            payload: Any = turn_update(message, user_id=user_id)
+            if transaction_id:
+                payload["transaction_id"] = transaction_id
+        else:
+            payload = initial_state(message, user_id, transaction_id=transaction_id)
+
+        self.graph.invoke(payload, config=config)
         return self.state(thread_id)
+
+    def _has_history(self, thread_id: str) -> bool:
+        """True when this thread has already been used."""
+        try:
+            return bool(self.state(thread_id).get("messages"))
+        except Exception:  # noqa: BLE001 - an unknown thread simply has none
+            return False
+
+    def awaiting(self, thread_id: str = "default") -> Awaiting:
+        """What the system last asked this customer for, if anything."""
+        return Awaiting(self.state(thread_id).get("awaiting", "") or "")
 
     def state(self, thread_id: str = "default") -> SupportState:
         """Current stored state of a conversation."""

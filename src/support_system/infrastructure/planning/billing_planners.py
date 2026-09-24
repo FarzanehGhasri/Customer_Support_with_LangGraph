@@ -78,13 +78,18 @@ class RuleBasedBillingPlanner:
     def plan(self, user_message: str) -> BillingPlan:
         text = user_message.lower()
 
-        # A refund request with a concrete transaction id is unambiguous.
+        # A refund request is a refund request whether or not the id is there.
+        # The planner states the *intent*; the agent asks for a missing id.
         transaction = _TRANSACTION_RE.search(user_message)
-        if any(m in text for m in REFUND_MARKERS) and transaction:
+        if any(m in text for m in REFUND_MARKERS):
             return BillingPlan(
                 action=BillingAction.PROCESS_REFUND,
-                argument=transaction.group(0).upper(),
-                reasoning="Refund requested with a transaction id.",
+                argument=transaction.group(0).upper() if transaction else "",
+                reasoning=(
+                    "Refund requested with a transaction id."
+                    if transaction
+                    else "Refund requested; the transaction id still has to be asked for."
+                ),
             )
 
         if any(m in text for m in SUBSCRIPTION_MARKERS):

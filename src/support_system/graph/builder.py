@@ -9,6 +9,11 @@ Graph assembly -- wires the four nodes into a LangGraph state machine.
 
 Two design points worth calling out:
 
+**A follow-up skips reception.** When a specialist has asked the customer for
+an id, ``_entry_route`` sends the reply straight back to that specialist: a bare
+"12345" put through triage would be classified as small talk and the thread
+would be lost.
+
 **Routing lives in the state, not in the nodes.** Every node writes
 ``next_step``; a single ``_route`` function maps that value to a node name.
 Nodes therefore never name each other, so adding a department later touches the
@@ -29,7 +34,7 @@ from typing import Any, Mapping, Sequence
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 
-from ..domain.enums import NextStep
+from ..domain.enums import Awaiting, Department, NextStep
 from ..domain.state import SupportState
 from ..interfaces.nodes import SupportNode
 
@@ -45,6 +50,28 @@ ROUTES: Mapping[str, str] = {
     NextStep.HUMAN_REVIEW.value: "human_review",
     NextStep.FINISH.value: END,
 }
+
+
+def _entry_route(state: SupportState) -> str:
+    """Decide which node a new message enters.
+
+    Normally every message starts at reception. The exception is a follow-up:
+    when a specialist has asked the customer for something (``awaiting`` is
+    set), the reply goes straight back to that specialist. Sending a bare
+    "12345" through triage would classify it as small talk and lose the thread.
+    """
+    awaiting = Awaiting(state.get("awaiting", "") or "")
+    if not awaiting.is_pending:
+        return "triage"
+
+    department = state.get("pending_department", "")
+    try:
+        destination = ROUTES[NextStep.for_department(department).value]
+    except (ValueError, KeyError):
+        logger.warning("Pending department %r is not routable; using triage.", department)
+        return "triage"
+    logger.info("Follow-up answer -> back to %s (awaiting %s).", destination, awaiting.value)
+    return destination
 
 
 def _route(state: SupportState) -> str:
@@ -90,7 +117,15 @@ def build_support_graph(
     for node in (triage, billing, technical, general, guardrail, human_review):
         builder.add_node(node.name, node)
 
-    builder.add_edge(START, "triage")
+    builder.add_conditional_edges(
+        START, _entry_route,
+        {
+            "triage": "triage",
+            "billing": "billing",
+            "technical": "technical",
+            "general": "general",
+        },
+    )
 
     # Triage fans out to the three specialists.
     builder.add_conditional_edges(

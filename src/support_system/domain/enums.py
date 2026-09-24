@@ -105,3 +105,28 @@ class BillingAction(str, Enum):
     def needs_argument(self) -> bool:
         """True when the action cannot run without an id."""
         return self in (BillingAction.CHECK_SUBSCRIPTION, BillingAction.PROCESS_REFUND)
+
+
+class Awaiting(str, Enum):
+    """Information the system has asked the customer for and is waiting on.
+
+    This is what turns a one-shot answer into a conversation: when a specialist
+    cannot act without an id, it records what it needs here, and the next
+    message is interpreted as the answer instead of being classified afresh.
+    """
+
+    NOTHING = ""
+    ACCOUNT_ID = "account_id"
+    TRANSACTION_ID = "transaction_id"
+
+    @property
+    def is_pending(self) -> bool:
+        return self is not Awaiting.NOTHING
+
+    @property
+    def label(self) -> str:
+        """Human wording used when asking for it."""
+        return {
+            Awaiting.ACCOUNT_ID: "account ID",
+            Awaiting.TRANSACTION_ID: "transaction ID",
+        }.get(self, "information")

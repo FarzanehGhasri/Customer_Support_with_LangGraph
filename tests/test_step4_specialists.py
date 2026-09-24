@@ -101,8 +101,11 @@ def test_billing_never_refunds_a_transaction_id_the_customer_did_not_write(setti
         composer,
     )
     update = agent(initial_state("I am unhappy with my purchase", "12345"))
+    # The important part: the gateway was never called with the invented id.
     assert update.get("tool_calls", []) == []
-    assert "no transaction id" in update["draft_response"].lower()
+    # Instead of acting on it, the agent asks the customer for a real one.
+    assert update["awaiting"] == "transaction_id"
+    assert "transaction id" in update["draft_response"].lower()
 
 
 def test_billing_uses_the_session_account_id_over_the_planners_guess(settings, composer):
@@ -220,10 +223,17 @@ def test_rule_planner_decisions(message, expected):
     assert RuleBasedBillingPlanner().plan(message).action is expected
 
 
-def test_refund_without_a_transaction_id_is_not_a_refund_action():
-    """Without an id there is nothing to refund, so do not choose that action."""
+def test_refund_without_a_transaction_id_is_still_a_refund_intent():
+    """The planner states intent; a missing id is the agent's problem to solve.
+
+    This reverses an earlier rule. Previously a refund request without an id fell
+    through to answer_directly, which meant the system never asked for the id and
+    the customer was stuck. Now the action is kept and `argument` is left empty,
+    so the agent asks and resumes once the id arrives.
+    """
     plan = RuleBasedBillingPlanner().plan("I want my money back")
-    assert plan.action is not BillingAction.PROCESS_REFUND
+    assert plan.action is BillingAction.PROCESS_REFUND
+    assert plan.argument == ""
 
 
 def test_template_composer_returns_the_verified_fallback(composer):

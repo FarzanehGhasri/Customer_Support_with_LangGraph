@@ -119,6 +119,35 @@ bot> ## Reset a forgotten password ...
 | `/kb <query>` | جستجوی مستقیم در knowledge base، بدون دخالت ایجنت‌ها |
 | `/quit` | خروج |
 
+### وقتی ربات شناسه لازم دارد
+
+اگر سوالی بپرسید که به شناسهٔ حساب نیاز دارد و شناسه را نداده باشید، ربات **می‌پرسد**،
+بعد شناسه را در فایل مشتریان جستجو می‌کند و بر اساس نتیجه جواب می‌دهد:
+
+```
+you> My subscription is not working
+bot> Of course -- could you tell me your account ID so I can look that up?
+     [Billing | Neutral | tools: none]
+
+you> 99999
+bot> I could not find any account with the ID '99999'. Could you double-check it?
+     [Billing | Neutral | tools: check_subscription_status(99999) -> not found]
+
+you> 12345
+bot> User '12345' is on the 'Pro Monthly' plan; status: expired...
+     [Billing | Neutral | tools: check_subscription_status(12345) -> expired]
+```
+
+همین برای بازگشت وجه هم هست: «I want a refund» → می‌پرسد شمارهٔ تراکنش چیست →
+`TXN-1001` تایید، `TXN-1002` طبق قانون رد، `TXN-9999` پیدا نشد.
+
+نکته‌ها:
+
+* شناسهٔ پیدا شده تا آخر مکالمه به خاطر سپرده می‌شود.
+* اگر دو بار جواب ندهید، ربات دست از پرسیدن برمی‌دارد.
+* با `/user 12345` می‌توانید شناسه را از اول ست کنید تا اصلاً نپرسد.
+* شناسه‌های موجود: `12345` منقضی، `67890` فعال، `11111` آزمایشی، `22222` لغو شده.
+
 ### وقتی گاردریل فعال می‌شود
 
 اگر پیام عصبانی بنویسید، گراف **متوقف** می‌شود و prompt به `manager>` تغییر می‌کند.

@@ -33,7 +33,7 @@ from __future__ import annotations
 import operator
 from typing import Annotated, List, TypedDict
 
-from .enums import Department, NextStep, Sentiment
+from .enums import Awaiting, Department, NextStep, Sentiment
 
 
 class _SupportStateRequired(TypedDict):
@@ -75,6 +75,22 @@ class SupportState(_SupportStateRequired, total=False):
     # "specialist rejects -> triage re-routes -> specialist rejects" infinite loop.
     triage_attempts: int
 
+    # --- multi-turn follow-up ------------------------------------------ #
+    # Value of an :class:`Awaiting` member.  Non-empty means the last reply was
+    # a question and the customer's next message is the answer to it.
+    awaiting: str
+    # Which department asked, so the follow-up goes straight back to it instead
+    # of being re-classified by triage.
+    pending_department: str
+    # The action to resume once the missing value arrives (a BillingAction).
+    pending_action: str
+    # The question that triggered the request, kept so the specialist still has
+    # the original context after the customer replies with a bare id.
+    pending_query: str
+    # How many times we have asked for the same value.  Two strikes, then we
+    # stop pestering the customer and move on.
+    ask_attempts: int
+
 
 def initial_state(
     user_query: str,
@@ -101,7 +117,34 @@ def initial_state(
         escalated=False,
         tool_calls=[],
         triage_attempts=0,
+        awaiting=Awaiting.NOTHING.value,
+        pending_department="",
+        pending_action="",
+        pending_query="",
+        ask_attempts=0,
     )
+
+
+def turn_update(message: str, *, user_id: str = "") -> dict:
+    """Per-turn state for a *continuing* conversation.
+
+    Deliberately partial. A follow-up turn must reset the control-flow keys so
+    the message is handled afresh, while leaving the append-only transcript and
+    the follow-up bookkeeping (``awaiting``, ``pending_*``) untouched -- those
+    are what let the specialist pick up where it left off.
+    """
+    update: dict = {
+        "messages": [f"user: {message}"],
+        "user_query": message,
+        "next_step": NextStep.TRIAGE.value,
+        "triage_attempts": 0,
+        "escalated": False,
+        "draft_response": "",
+        "final_response": "",
+    }
+    if user_id:
+        update["user_id"] = user_id
+    return update
 
 
 def transcript(state: SupportState) -> str:

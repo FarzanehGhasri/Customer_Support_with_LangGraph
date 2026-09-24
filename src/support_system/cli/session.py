@@ -27,7 +27,7 @@ HELP = """\
 Commands
   /help              show this
   /new               start a fresh conversation (clears the history)
-  /user <id>         set the account id used by the billing tools
+  /user <id>         set the account id up front (otherwise the bot asks you)
                      known ids: 12345 (expired), 67890 (active), 11111 (trial),
                                 22222 (cancelled)
   /state             dump the full graph state of this conversation
@@ -41,9 +41,12 @@ Try
   The app crashes with error E-204             -> technical + RAG
   How do I connect the app to my smart fridge? -> technical, nothing in the docs,
                                                   so it admits it does not know
-  My subscription is not working               -> billing + check_subscription_status
-  I want a refund for TXN-1001                 -> billing + process_refund
-  I want a refund for TXN-1002                 -> refund refused by policy
+  My subscription is not working               -> asks for your account ID,
+                                                  then looks it up
+  12345 / 67890 / 11111 / 22222                -> a known ID -> real answer
+  99999                                        -> not in the records -> says so
+  I want a refund                              -> asks for the transaction ID
+  TXN-1001 / TXN-1002                          -> approved / refused by policy
   How do I reset my password? (with /user set) -> billing bounces it back to triage
   You stole my money! I want a manager         -> guardrail halts, asks you for a reply
 """
@@ -67,7 +70,10 @@ class ChatSession:
     """Drives one interactive conversation against a built application."""
 
     app: Any
-    user_id: str = "12345"
+    #: Empty by default, on purpose: with an id already set the billing agent
+    #: never needs to ask for one, and the ask-and-look-up flow is invisible.
+    #: /user sets it explicitly when you want to skip the question.
+    user_id: str = ""
     thread_prefix: str = "chat"
     _counter: itertools.count = field(default_factory=lambda: itertools.count(1))
     thread_id: str = ""
@@ -171,7 +177,8 @@ class ChatSession:
 
         if command == "user":
             if not argument:
-                return ChatTurn("info", f"Current account id: {self.user_id}")
+                current = self.user_id or "(none -- the bot will ask when it needs one)"
+                return ChatTurn("info", f"Current account id: {current}")
             self.user_id = argument
             status = self.app.repository.get_status(argument)
             return ChatTurn("info", f"Account id set to {argument}. {status.summary()}")

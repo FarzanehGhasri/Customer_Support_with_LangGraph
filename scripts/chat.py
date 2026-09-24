@@ -58,7 +58,8 @@ def main() -> int:
                         help="force the deterministic components (no API calls)")
     parser.add_argument("--dynamic", action="store_true",
                         help="pause with graph.interrupt() instead of update_state")
-    parser.add_argument("--user", default="12345", help="starting account id")
+    parser.add_argument("--user", default="",
+                        help="account id to start with; omitted means the bot asks for it")
     parser.add_argument("--verbose", action="store_true",
                         help="log each node's decision")
     args = parser.parse_args()
@@ -84,7 +85,8 @@ def main() -> int:
         print(DIM("      so they are unpolished but true. Routing and tools are identical."))
     else:
         print(f"MODE: LIVE — {settings.provider}/{settings.model}")
-    print(DIM(f"      account id: {session.user_id}   hitl: {app.hitl_mode}"))
+    print(DIM(f"      account id: {session.user_id or 'not set (the bot will ask)'}"
+              f"   hitl: {app.hitl_mode}"))
     print(DIM("      /help for commands, /quit to exit\n"))
 
     while True:
