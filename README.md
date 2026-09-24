@@ -168,7 +168,7 @@ names the requirement it breaks.
 
 ```bash
 python scripts/demo.py --offline      # the three scenarios, in the terminal, no API key
-python scripts/demo.py --offline --chat   # type your own messages
+python scripts/chat.py --offline      # interactive: type your own messages
 jupyter lab notebooks/customer_support_langgraph.ipynb
 python scripts/render_graph.py        # regenerate the graph image
 ```

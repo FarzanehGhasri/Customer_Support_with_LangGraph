@@ -86,8 +86,67 @@ python scripts/demo.py --offline
 python scripts/demo.py --offline --scenario 2     # فقط یک سناریو
 python scripts/demo.py --offline --verbose        # نمایش تصمیم هر گره
 python scripts/demo.py --offline --dynamic        # با graph.interrupt() به‌جای update_state
-python scripts/demo.py --offline --chat           # گفتگوی آزاد؛ پیام خودتان را تایپ کنید
 ```
+
+---
+
+## گام ۴.۵ — گفتگوی تعاملی (پیام خودتان را بنویسید)
+
+```bash
+python scripts/chat.py --offline
+```
+
+یک REPL باز می‌شود و می‌توانید هر پیامی بنویسید. هر پیام در **همان مکالمه** می‌ماند،
+پس تاریخچه حفظ می‌شود.
+
+زیر هر جواب یک خط خاکستری می‌بینید که نشان می‌دهد چه اتفاقی افتاده:
+
+```
+bot> ## Reset a forgotten password ...
+     [Technical | Neutral | tools: search_knowledge_base(...) -> grounded (best=0.63, ...)]
+```
+
+### دستورهای داخل گفتگو
+
+| دستور | کار |
+|---|---|
+| `/help` | فهرست دستورها و نمونه پیام‌ها |
+| `/new` | شروع مکالمهٔ تازه (پاک کردن تاریخچه) |
+| `/user <id>` | تغییر شناسهٔ حساب (`12345` منقضی، `67890` فعال، `11111` آزمایشی، `22222` لغو شده) |
+| `/state` | نمایش کامل state گراف |
+| `/history` | نمایش رونوشت مکالمه |
+| `/tools` | فهرست ابزارها |
+| `/kb <query>` | جستجوی مستقیم در knowledge base، بدون دخالت ایجنت‌ها |
+| `/quit` | خروج |
+
+### وقتی گاردریل فعال می‌شود
+
+اگر پیام عصبانی بنویسید، گراف **متوقف** می‌شود و prompt به `manager>` تغییر می‌کند.
+هر چه آنجا بنویسید به‌عنوان پاسخ مدیر ثبت می‌شود و مکالمه ادامه پیدا می‌کند.
+
+```
+you> You stole my money! I want a manager
+*** The guardrail detected an angry customer, so the graph has HALTED ... ***
+manager> I am the senior manager, I will follow up personally.
+bot> I am the senior manager, I will follow up personally.
+```
+
+گزینه‌های دیگر: `--dynamic` (استفاده از `graph.interrupt()`)، `--verbose`
+(نمایش تصمیم هر گره)، `--user <id>`، و بدون `--offline` برای استفاده از مدل واقعی.
+
+### تغییر متن پرامپت‌ها
+
+اگر می‌خواهید رفتار ایجنت‌ها را عوض کنید، متن پرامپت‌ها اینجاست:
+
+| فایل | مربوط به |
+|---|---|
+| `src/support_system/prompts/triage.py` | ایجنت تریاژ |
+| `src/support_system/prompts/specialists.py` | مالی، فنی، عمومی |
+| `src/support_system/prompts/guardrail.py` | تحلیل احساسات |
+
+پرامپت‌ها عمداً از کلاس ایجنت‌ها جدا نگه داشته شده‌اند تا تغییرشان به منطق مسیریابی
+دست نزند. توجه: پرامپت‌ها فقط در حالت **LIVE** اثر دارند؛ در حالت آفلاین
+تصمیم‌ها قاعده‌محورند (`infrastructure/classification/` و `infrastructure/planning/`).
 
 ---
 

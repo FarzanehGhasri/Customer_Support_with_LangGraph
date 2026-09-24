@@ -6,7 +6,9 @@ Run the three assignment scenarios from the terminal.
     python scripts/demo.py --scenario 2    # just one
     python scripts/demo.py --offline       # force the deterministic components
     python scripts/demo.py --dynamic       # use graph.interrupt() instead of update_state
-    python scripts/demo.py --chat          # interactive: type your own messages
+
+For an interactive session where you type your own messages, use
+``python scripts/chat.py`` instead.
 
 This is the quickest way to see the system work; the notebook shows the same
 thing with explanations.
@@ -80,37 +82,6 @@ def scenario_3(app) -> None:
     show(final, "SCENARIO 3 — resumed after the manager's reply")
 
 
-def chat(app) -> None:
-    """Free-form conversation, so you can try your own messages."""
-    print("Type a message ('quit' to exit). Each message starts a fresh conversation.\n")
-    turn = 0
-    while True:
-        try:
-            message = input("you> ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        if message.lower() in {"quit", "exit", ""}:
-            return
-
-        turn += 1
-        thread = f"chat-{turn}"
-        state = app.run(message, user_id="12345", thread_id=thread)
-
-        if app.is_interrupted(thread):
-            print("\n*** escalated: this customer sounds angry, the graph has halted ***")
-            reply = input("manager> ").strip() or MANAGER_REPLY
-            if app.hitl_mode == "dynamic":
-                state = app.resume_with(reply, thread_id=thread)
-            else:
-                app.inject_manager_reply(reply, thread_id=thread)
-                state = app.resume(thread)
-
-        print(f"\nbot> {state.get('final_response')}")
-        print(f"     [{state.get('department')} | {state.get('sentiment')}"
-              f" | tools: {state.get('tool_calls') or 'none'}]\n")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", type=int, choices=[1, 2, 3], help="run only this scenario")
@@ -118,7 +89,6 @@ def main() -> int:
                         help="force the deterministic components (no API calls, no cost)")
     parser.add_argument("--dynamic", action="store_true",
                         help="use the graph.interrupt() form instead of update_state")
-    parser.add_argument("--chat", action="store_true", help="interactive mode")
     parser.add_argument("--verbose", action="store_true", help="show each node's decision")
     args = parser.parse_args()
 
@@ -142,10 +112,6 @@ def main() -> int:
     else:
         print(f"MODE: LIVE — {settings.provider}/{settings.model}")
     print(f"HITL: {app.hitl_mode}\n")
-
-    if args.chat:
-        chat(app)
-        return 0
 
     runners = {1: scenario_1, 2: scenario_2, 3: scenario_3}
     for number in ([args.scenario] if args.scenario else [1, 2, 3]):
