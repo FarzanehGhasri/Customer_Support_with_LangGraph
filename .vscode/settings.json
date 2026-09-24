@@ -1,0 +1,17 @@
+{
+  // Run notebooks with the notebook's own folder as the working directory.
+  // The notebook searches upwards for the project root anyway, so either value
+  // works -- this one just keeps relative paths predictable.
+  "jupyter.notebookFileRoot": "${fileDirname}",
+
+  // Make `import support_system` resolve for Pylance without installing the
+  // package, matching what the notebook and the scripts do at runtime.
+  "python.analysis.extraPaths": ["./src"],
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true
+  }
+}

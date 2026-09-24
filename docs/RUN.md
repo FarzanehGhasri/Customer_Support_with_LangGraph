@@ -192,15 +192,64 @@ jupyter lab notebooks/customer_support_langgraph.ipynb
 jupyter notebook notebooks/customer_support_langgraph.ipynb
 ```
 
+### اجرا در VS Code (گام به گام)
+
+۱. پوشهٔ پروژه را در VS Code باز کنید (`File → Open Folder`).
+   دو افزونه لازم است و خود VS Code پیشنهادشان می‌دهد:
+   **Python** و **Jupyter**.
+
+۲. فایل `notebooks/customer_support_langgraph.ipynb` را باز کنید.
+
+۳. بالا سمت راست روی **Select Kernel** بزنید →
+   **Python Environments** → `.venv` را انتخاب کنید (همانی که در گام ۲ ساختید).
+
+   اگر `.venv` در لیست نبود:
+   ```bash
+   .venv\Scripts\python.exe -m pip install ipykernel
+   ```
+   بعد VS Code را دوباره باز کنید.
+
+۴. **Run All** را بزنید (یا `Ctrl+Shift+P` → `Notebook: Run All Cells`).
+
+   ترتیب مهم است: سه سلول اول **Setup** هستند و بقیه فقط به آن‌ها وابسته‌اند.
+   بعد از اجرای Setup، هر سلول دیگری را می‌توانید جداگانه دوباره اجرا کنید.
+
+۵. `Ctrl+S` بزنید. خروجی‌ها داخل خود فایل `.ipynb` ذخیره می‌شوند — همان چیزی
+   که برای تحویل لازم است.
+
+> اگر `ModuleNotFoundError: support_system` دیدید، یعنی kernel اشتباه انتخاب شده
+> (مثلاً پایتون سراسری به‌جای `.venv`). دوباره گام ۳ را انجام دهید.
+
+فایل `.vscode/settings.json` از قبل در ریپو هست و مسیر `src` را به Pylance
+معرفی می‌کند، پس import‌ها زیرشان خط قرمز نمی‌خورد.
+
+### تصویر گراف داخل نوت‌بوک
+
+سلول بخش ۴ با `draw_mermaid_png()` تصویر را می‌سازد، در
+`docs/images/support_graph.png` ذخیره می‌کند، و **داخل خروجی سلول نمایش می‌دهد** —
+یعنی تصویر در خود فایل `.ipynb` جاسازی می‌شود.
+
+این سلول به اینترنت نیاز دارد (سرویس `mermaid.ink`). اگر شکست بخورد:
+
+* اگر قبلاً PNG ساخته شده باشد، همان را نشان می‌دهد؛
+* وگرنه پیام می‌دهد که `python scripts/render_graph.py` را با VPN اجرا کنید،
+  یا محتوای `docs/images/support_graph.mmd` را در <https://mermaid.live> بچسبانید.
+
 ### ساختن دوبارهٔ خروجی‌ها
 
 اگر کد را تغییر دادید و می‌خواهید خروجی‌های نوت‌بوک به‌روز شوند:
 
 ```bash
-python scripts/build_notebook.py
+python scripts/build_notebook.py     # اجرا و ذخیرهٔ خروجی‌ها
+python scripts/make_notebook.py      # ساخت دوبارهٔ خود نوت‌بوک از روی کد
+python scripts/make_notebook.py --execute   # هر دو با هم
 ```
 
-همهٔ سلول‌ها را در یک kernel تمیز و به ترتیب اجرا می‌کند، خروجی‌ها را داخل خود فایل
+نوت‌بوک از روی `scripts/make_notebook.py` **تولید** می‌شود، نه دستی ویرایش.
+اگر می‌خواهید سلولی را عوض کنید، آن اسکریپت را ویرایش کنید و دوباره بسازید —
+این‌طور نوت‌بوک هیچ‌وقت از کد عقب نمی‌افتد.
+
+`build_notebook.py` همهٔ سلول‌ها را در یک kernel تمیز و به ترتیب اجرا می‌کند، خروجی‌ها را داخل خود فایل
 ذخیره می‌کند، و در آخر بررسی می‌کند که هیچ سلولی خطا نداده باشد:
 
 ```
