@@ -311,6 +311,68 @@ python scripts/demo.py          # بدون --offline
 | `MODE: OFFLINE — APIConnectionError` | آدرس `SUPPORT_BASE_URL` غلط است یا اینترنت/فیلترینگ |
 | `Failed to reach https://mermaid.ink` | فقط روی تصویر گراف اثر دارد → VPN یا mermaid.live |
 | `verify_provider` در مرحلهٔ ۳ رد شد | این gateway از JSON schema پشتیبانی نمی‌کند → مدل دیگری امتحان کنید، یا آفلاین اجرا کنید |
+| `NotJSONError` / `JSONDecodeError` روی نوت‌بوک | فایل `.ipynb` خراب شده — معمولاً کانفلیکت گیت. ↓ بخش زیر |
+
+---
+
+## نوت‌بوک خراب شد (`NotJSONError`)
+
+یک فایل `.ipynb` در واقع یک فایل JSON است. اگر این خطا را دیدید:
+
+```
+nbformat.reader.NotJSONError: Notebook does not appear to be JSON
+json.decoder.JSONDecodeError: Expecting property name enclosed in double quotes
+```
+
+یعنی محتوای فایل خراب شده. **شایع‌ترین علت: کانفلیکت گیت.**
+
+چرا پیش می‌آید؟ نوت‌بوک **همراه با خروجی‌ها** commit شده (چون تحویلی باید خروجی
+داشته باشد). وقتی شما محلی اجرایش می‌کنید، خروجی‌ها عوض می‌شوند و فایل dirty می‌شود؛
+`git pull` بعدی کانفلیکت می‌دهد و گیت نشانه‌های `<<<<<<<` را داخل فایل می‌گذارد —
+که دیگر JSON معتبر نیست.
+
+### تشخیص
+
+```bash
+python scripts/build_notebook.py --no-execute
+```
+
+خودش دلیل و شمارهٔ خط را می‌گوید و دستور رفع را چاپ می‌کند.
+
+### رفع
+
+```bash
+# اگر merge نیمه‌کاره است، اول لغوش کنید
+git merge --abort
+
+# نسخهٔ سالم commit‌شده را برگردانید
+git checkout -- notebooks/customer_support_langgraph.ipynb
+
+# یا مستقیماً از ریموت، فارغ از وضعیت merge
+git fetch origin
+git checkout origin/claude/awesome-brahmagupta-4bgqv5 -- notebooks/customer_support_langgraph.ipynb
+```
+
+بعدش دوباره:
+
+```bash
+python scripts/build_notebook.py
+```
+
+### جلوگیری از تکرار
+
+قبل از هر `git pull`، تغییرات محلیِ نوت‌بوک را دور بریزید:
+
+```bash
+git checkout -- notebooks/
+git pull
+```
+
+اگر می‌خواهید اجرای محلی‌تان حفظ شود، اول یک کپی بگیرید:
+
+```bash
+cp notebooks/customer_support_langgraph.ipynb notebooks/my_run.ipynb
+```
 
 ---
 

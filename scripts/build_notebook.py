@@ -18,12 +18,81 @@ Exit code is non-zero if any cell raised, so this can be used as a check.
 from __future__ import annotations
 
 import argparse
+import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
+#: Real git conflict markers sit at the very start of a line and have an exact
+#: shape. Matching loosely would fire on ordinary output -- this notebook prints
+#: banners made of "=" characters, which a naive "=======" search flags as a
+#: conflict. Anchoring to the line start and pinning the length avoids that:
+#: inside a .ipynb every output line is quoted and indented, so only markers
+#: git itself inserted begin at column 0.
+_CONFLICT_RE = re.compile(r"^(<{7} |={7}$|>{7} |\|{7} )", re.MULTILINE)
+
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = ROOT / "notebooks" / "customer_support_langgraph.ipynb"
+
+
+def preflight(path: Path) -> int:
+    """Fail early, and usefully, if the file is not a readable notebook.
+
+    nbconvert's own failure for a damaged file is a forty-line traceback ending
+    in a JSONDecodeError, which says nothing about the cause or the cure. The
+    overwhelmingly common cause is a git conflict: the notebook is committed
+    with its outputs, so running it locally always dirties the file and the next
+    pull collides. Diagnose that here and say exactly what to type.
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        print(f"FAILED: {path.name} is not UTF-8 text ({exc}).")
+        print("  Restore it with:  git checkout -- " + _repo_relative(path))
+        return 1
+
+    conflicts = [m.start() for m in _CONFLICT_RE.finditer(raw)]
+    if conflicts:
+        line = raw.count("\n", 0, conflicts[0]) + 1
+        print(f"FAILED: {path.name} contains git conflict markers (first at line {line}).")
+        print()
+        print("  This happens because the notebook is committed WITH its outputs, so")
+        print("  running it locally changes the file and the next `git pull` collides.")
+        print()
+        print("  Take the committed version and start again:")
+        print(f"      git checkout -- {_repo_relative(path)}")
+        print("  If a merge is still in progress, abort it first:")
+        print("      git merge --abort")
+        print("  Or force the remote copy regardless of merge state:")
+        print("      git fetch origin")
+        print(f"      git checkout origin/<branch> -- {_repo_relative(path)}")
+        return 1
+
+    try:
+        json.loads(raw)
+    except json.JSONDecodeError as exc:
+        print(f"FAILED: {path.name} is not valid JSON -- {exc.msg} at line {exc.lineno}.")
+        print()
+        print("  The offending line:")
+        lines = raw.splitlines()
+        for number in range(max(1, exc.lineno - 2), min(len(lines), exc.lineno + 1) + 1):
+            marker = ">>" if number == exc.lineno else "  "
+            print(f"    {marker} {number:5} {lines[number - 1][:100]}")
+        print()
+        print("  A notebook is a JSON file; something has damaged it. Restore it with:")
+        print(f"      git checkout -- {_repo_relative(path)}")
+        return 1
+
+    return 0
+
+
+def _repo_relative(path: Path) -> str:
+    """Path as you would type it from the repo root, with forward slashes."""
+    try:
+        return path.resolve().relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.name
 
 
 def execute(path: Path, timeout: int) -> None:
@@ -93,6 +162,12 @@ def main() -> int:
     if not path.is_file():
         print(f"No such notebook: {path}")
         return 1
+
+    # Check the file is readable before handing it to nbconvert, whose failure
+    # for a damaged notebook is an unhelpful traceback.
+    status = preflight(path)
+    if status:
+        return status
 
     if not args.no_execute:
         try:
