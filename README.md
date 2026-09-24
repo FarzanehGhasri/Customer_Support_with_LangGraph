@@ -118,6 +118,8 @@ Dependency direction is strictly inward:
 
 ## Setup
 
+> **Step-by-step run guide (فارسی + English): [`docs/RUN.md`](docs/RUN.md)**
+
 ```bash
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
@@ -165,6 +167,8 @@ names the requirement it breaks.
 ## Running it
 
 ```bash
+python scripts/demo.py --offline      # the three scenarios, in the terminal, no API key
+python scripts/demo.py --offline --chat   # type your own messages
 jupyter lab notebooks/customer_support_langgraph.ipynb
 python scripts/render_graph.py        # regenerate the graph image
 ```

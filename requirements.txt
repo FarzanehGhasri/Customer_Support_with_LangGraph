@@ -14,8 +14,8 @@ jupyter>=1.0
 ipykernel>=6.29
 
 # --- Graph image (draw_mermaid_png) ---------------------------------------
-# Rendering falls back to the public mermaid.ink API when pyppeteer is absent.
-# pyppeteer>=2.0             # uncomment to render the PNG fully offline
+grandalf>=0.8                # ASCII fallback rendering of the graph
+# pyppeteer>=2.0             # uncomment to render the PNG without internet access
 
 # --- Development -----------------------------------------------------------
 pytest>=8.0
