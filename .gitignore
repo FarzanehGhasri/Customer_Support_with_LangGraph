@@ -11,6 +11,9 @@ venv/
 
 # Notebook artefacts
 .ipynb_checkpoints/
+# Exported copies are generated on demand; the .ipynb is the deliverable.
+notebooks/*.html
+notebooks/*.pdf
 
 # LangGraph checkpoint database
 *.sqlite

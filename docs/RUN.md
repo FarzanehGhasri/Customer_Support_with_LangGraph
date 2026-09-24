@@ -181,18 +181,51 @@ bot> I am the senior manager, I will follow up personally.
 
 ## گام ۵ — نوت‌بوک (فایل تحویلی)
 
+فایل `notebooks/customer_support_langgraph.ipynb` **با خروجی‌های ذخیره‌شده** در ریپو
+هست. یعنی بعد از `git pull` آماده است و برای خواندن نیازی به اجرا ندارد.
+
+باز کردنش:
+
 ```bash
 jupyter lab notebooks/customer_support_langgraph.ipynb
-```
-
-یا اگر `jupyter lab` را ترجیح نمی‌دهید:
-
-```bash
+# یا
 jupyter notebook notebooks/customer_support_langgraph.ipynb
 ```
 
-خروجی‌های همهٔ سلول‌ها از قبل ذخیره شده‌اند، پس بدون اجرا هم قابل خواندن است.
-برای اجرای دوباره: **Kernel → Restart & Run All**.
+### ساختن دوبارهٔ خروجی‌ها
+
+اگر کد را تغییر دادید و می‌خواهید خروجی‌های نوت‌بوک به‌روز شوند:
+
+```bash
+python scripts/build_notebook.py
+```
+
+همهٔ سلول‌ها را در یک kernel تمیز و به ترتیب اجرا می‌کند، خروجی‌ها را داخل خود فایل
+ذخیره می‌کند، و در آخر بررسی می‌کند که هیچ سلولی خطا نداده باشد:
+
+```
+  cells           : 41 (23 code)
+  with outputs    : 23/23
+  execution errors: 0
+  OK: notebooks/customer_support_langgraph.ipynb
+```
+
+اگر سلولی خطا بدهد، exit code غیرصفر می‌شود — پس می‌شود در CI هم استفاده کرد.
+
+> چرا اسکریپت به‌جای «فقط Run All»؟ چون تحویلی باید فایلی باشد که خروجی‌ها
+> **داخلش** ذخیره شده باشد. اجرای خط‌فرمانی تضمین می‌کند همهٔ سلول‌ها، به ترتیب،
+> در یک kernel تازه اجرا شده‌اند.
+
+### گرفتن خروجی HTML یا PDF
+
+```bash
+python scripts/build_notebook.py --html      # فایل .html کنار نوت‌بوک
+python scripts/build_notebook.py --pdf       # نیاز به نصب LaTeX دارد
+```
+
+برای PDF، راه ساده‌تر: HTML بسازید و در مرورگر `Ctrl+P` → Save as PDF.
+
+> فایل‌های `.html` و `.pdf` در `.gitignore` هستند — تحویلی خودِ `.ipynb` است.
 
 ---
 
