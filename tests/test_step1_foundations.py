@@ -303,3 +303,23 @@ def test_support_model_does_not_leak_across_an_explicit_provider_override(monkey
 def test_explicit_model_override_always_wins(monkeypatch):
     monkeypatch.setenv("SUPPORT_MODEL", "gpt-4o-mini")
     assert Settings.from_env(provider="anthropic", model="claude-sonnet-5").model == "claude-sonnet-5"
+
+
+def test_dotenv_survives_a_utf8_byte_order_mark(tmp_path, monkeypatch):
+    """PowerShell's `-Encoding utf8` writes a BOM; it must not join the first key.
+
+    Without utf-8-sig the first variable is named "﻿OPENAI_API_KEY" and the
+    real one silently looks unset.
+    """
+    from support_system.config import load_dotenv
+
+    env_file = tmp_path / ".env"
+    env_file.write_bytes(
+        b"\xef\xbb\xbfOPENAI_API_KEY=sk-from-powershell\r\nSUPPORT_MODEL=gpt-4o-mini\r\n"
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("SUPPORT_MODEL", raising=False)
+
+    applied = load_dotenv(env_file, override=True)
+    assert applied["OPENAI_API_KEY"] == "sk-from-powershell"   # not "﻿OPENAI_API_KEY"
+    assert applied["SUPPORT_MODEL"] == "gpt-4o-mini"           # CRLF stripped
