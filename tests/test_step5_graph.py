@@ -259,9 +259,13 @@ def test_an_unreachable_endpoint_forces_offline_mode(monkeypatch):
     from support_system.config import Settings
     from support_system.graph import application as application_module
 
+    from support_system.infrastructure.llm import ProviderCapabilities
+
     monkeypatch.setattr(
-        application_module, "probe_provider",
-        lambda settings, **kwargs: (False, "ConnectionError: unreachable"),
+        application_module, "probe_capabilities",
+        lambda settings, **kwargs: ProviderCapabilities(
+            chat_error="ConnectionError: unreachable"
+        ),
     )
     app = build_application(Settings(provider="openai", api_key="sk-looks-real"))
     assert app.offline is True
@@ -277,11 +281,15 @@ def test_a_reachable_endpoint_selects_live_components(monkeypatch):
     from support_system.graph import application as application_module
     from support_system.infrastructure.classification import LLMIntentClassifier
 
+    from support_system.infrastructure.llm import ProviderCapabilities
+
     monkeypatch.setattr(
-        application_module, "probe_provider", lambda settings, **kwargs: (True, "")
+        application_module, "probe_capabilities",
+        lambda settings, **kwargs: ProviderCapabilities(chat=True, structured_output=True),
     )
     app = build_application(Settings(provider="openai", api_key="sk-looks-real"))
     assert app.offline is False and app.offline_reason == ""
+    assert app.mode == "live"
 
 
 def test_probe_can_be_skipped(monkeypatch):
@@ -290,9 +298,9 @@ def test_probe_can_be_skipped(monkeypatch):
     from support_system.graph import application as application_module
 
     def _boom(*args, **kwargs):
-        raise AssertionError("probe_provider must not be called when probe=False")
+        raise AssertionError("probe_capabilities must not be called when probe=False")
 
-    monkeypatch.setattr(application_module, "probe_provider", _boom)
+    monkeypatch.setattr(application_module, "probe_capabilities", _boom)
     app = build_application(Settings(provider="openai", api_key="sk-x"), probe=False)
     assert app.offline is False
 
@@ -302,8 +310,8 @@ def test_forced_offline_skips_the_probe(monkeypatch):
     from support_system.graph import application as application_module
 
     def _boom(*args, **kwargs):
-        raise AssertionError("probe_provider must not be called when force_offline=True")
+        raise AssertionError("probe_capabilities must not be called when force_offline=True")
 
-    monkeypatch.setattr(application_module, "probe_provider", _boom)
+    monkeypatch.setattr(application_module, "probe_capabilities", _boom)
     app = build_application(Settings(api_key="sk-x"), force_offline=True)
     assert app.offline is True and app.offline_reason == "forced by the caller"

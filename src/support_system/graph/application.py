@@ -41,7 +41,7 @@ from ..infrastructure.planning import LLMBillingPlanner, RuleBasedBillingPlanner
 from ..infrastructure.llm import (
     LangChainEmbeddingProvider,
     LangChainModelProvider,
-    probe_provider,
+    probe_capabilities,
 )
 from ..infrastructure.retrieval import EmbeddingKnowledgeRetriever, KeywordKnowledgeRetriever
 from .builder import build_support_graph
@@ -65,9 +65,34 @@ class SupportApplication:
     offline: bool
     #: Why the system is offline, if it is. Empty when running live.
     offline_reason: str = ""
+    #: "live" | "degraded" | "offline". See build_application for what each means.
+    mode: str = "offline"
     #: "static" (interrupt_before + update_state) or "dynamic" (interrupt() +
     #: Command(resume=...)). See build_application for the difference.
     hitl_mode: str = "static"
+
+    # ------------------------------------------------------------------ #
+    @property
+    def degraded(self) -> bool:
+        """True when the model phrases answers but cannot classify.
+
+        Routing and sentiment then come from the deterministic components. The
+        system still works end to end, but it is not the full model-backed
+        configuration -- and saying so is the entire point of tracking it.
+        """
+        return self.mode == "degraded"
+
+    def describe_mode(self) -> str:
+        """One line for a user: which mode, and why."""
+        if self.mode == "live":
+            return f"LIVE - {self.settings.provider}/{self.settings.model}"
+        if self.mode == "degraded":
+            return (
+                f"DEGRADED - {self.settings.provider}/{self.settings.model} answers chat but "
+                f"not with_structured_output ({self.offline_reason}). "
+                "Routing and sentiment use the deterministic classifiers."
+            )
+        return f"OFFLINE - {self.offline_reason}"
 
     # ------------------------------------------------------------------ #
     def run(
@@ -211,16 +236,30 @@ def build_application(
     """
     settings = settings or Settings.from_env()
 
+    # ------------------------------------------------------------------ #
+    # Decide the mode. Three, not two, because a gateway can answer chat
+    # while refusing JSON-schema output -- and triage depends on the latter.
+    #   live     : model classifies and phrases
+    #   degraded : model phrases; rules classify (structured output missing)
+    #   offline  : no model at all
+    # ------------------------------------------------------------------ #
     offline_reason = ""
+    can_classify = True
     if force_offline:
-        offline, offline_reason = True, "forced by the caller"
+        offline, offline_reason, can_classify = True, "forced by the caller", False
     elif not settings.has_credentials:
-        offline, offline_reason = True, f"no {settings.api_key_env_var}"
+        offline, offline_reason, can_classify = True, f"no {settings.api_key_env_var}", False
     elif probe:
-        reachable, why = probe_provider(settings)
-        offline, offline_reason = (not reachable), ("" if reachable else why)
+        capabilities = probe_capabilities(settings)
+        offline = not capabilities.chat
+        offline_reason = capabilities.chat_error
+        can_classify = capabilities.structured_output
+        if capabilities.chat and not capabilities.structured_output:
+            offline_reason = capabilities.structured_error
     else:
         offline = False
+
+    mode = "offline" if offline else ("live" if can_classify else "degraded")
 
     if offline:
         logger.warning(
@@ -228,20 +267,35 @@ def build_application(
             "are in use; no API calls will be made.",
             offline_reason,
         )
+    elif mode == "degraded":
+        # Loudly, because the alternative is silent mis-routing: without
+        # structured output every message would classify as General, no tool
+        # would ever run, and an angry customer would never be escalated.
+        logger.warning(
+            "Running DEGRADED: this endpoint does not support "
+            "with_structured_output (%s). Routing and sentiment will use the "
+            "deterministic classifiers; the model still phrases the answers.",
+            offline_reason,
+        )
 
     provider = LangChainModelProvider(settings)
 
     # --- model-backed components, or their deterministic twins --------- #
-    if offline:
-        classifier: Any = KeywordIntentClassifier()
-        analyzer: Any = KeywordSentimentAnalyzer()
-        planner: Any = RuleBasedBillingPlanner()
-        composer: Any = TemplateResponseComposer()
+    # Classification and phrasing are chosen independently: they need different
+    # capabilities, so a gateway may support one and not the other.
+    if can_classify:
+        classifier: Any = LLMIntentClassifier(provider)
+        analyzer: Any = LLMSentimentAnalyzer(provider)
+        planner: Any = LLMBillingPlanner(provider)
     else:
-        classifier = LLMIntentClassifier(provider)
-        analyzer = LLMSentimentAnalyzer(provider)
-        planner = LLMBillingPlanner(provider)
-        composer = LLMResponseComposer(provider, temperature=settings.temperature)
+        classifier = KeywordIntentClassifier()
+        analyzer = KeywordSentimentAnalyzer()
+        planner = RuleBasedBillingPlanner()
+
+    composer: Any = (
+        TemplateResponseComposer() if offline
+        else LLMResponseComposer(provider, temperature=settings.temperature)
+    )
 
     # --- retrieval ---------------------------------------------------- #
     keyword_retriever = KeywordKnowledgeRetriever(
@@ -291,5 +345,6 @@ def build_application(
         gateway=gateway,
         offline=offline,
         offline_reason=offline_reason,
+        mode=mode,
         hitl_mode=hitl_mode,
     )

@@ -16,6 +16,7 @@ use, and merely importing this module never fails because
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Type
 
 from ...config.settings import Settings
@@ -232,46 +233,122 @@ class LangChainEmbeddingProvider:
 # --------------------------------------------------------------------------- #
 
 
-def probe_provider(settings: Settings, *, timeout: int = 15) -> tuple[bool, str]:
-    """Check that the configured model can actually be reached and used.
+@dataclass(frozen=True)
+class ProviderCapabilities:
+    """What the configured endpoint can actually do.
 
-    Why this exists
-    ---------------
+    Two capabilities, probed separately, because they fail independently and
+    the system needs them for different jobs:
+
+    * ``chat`` -- ordinary completions. The composers need this to phrase
+      answers.
+    * ``structured_output`` -- ``with_structured_output``, i.e. JSON-schema or
+      function calling. **Triage and the sentiment guardrail depend on it
+      entirely.**
+
+    OpenAI-compatible gateways very often support the first and not the second.
+    Treating them as one capability is what produced the bug this class exists
+    to prevent: chat worked, the probe passed, the system ran "live", and every
+    classification silently fell back to General -- routing nothing, calling no
+    tools, and never escalating an angry customer.
+    """
+
+    chat: bool = False
+    structured_output: bool = False
+    #: Why chat is unavailable, if it is.
+    chat_error: str = ""
+    #: Why structured output is unavailable, if it is.
+    structured_error: str = ""
+
+    @property
+    def fully_usable(self) -> bool:
+        """True when every component can run in its model-backed form."""
+        return self.chat and self.structured_output
+
+    @property
+    def summary(self) -> str:
+        """One line suitable for printing to a user."""
+        if self.fully_usable:
+            return "chat + structured output"
+        if self.chat:
+            return f"chat only -- structured output unavailable ({self.structured_error})"
+        return f"unusable ({self.chat_error})"
+
+
+def probe_capabilities(settings: Settings, *, timeout: int = 20) -> ProviderCapabilities:
+    """Find out what the endpoint supports, with two small calls.
+
     Every component in this project degrades gracefully when a model call
-    fails -- the classifier falls back, the composer returns the verified tool
-    output, and so on. That is the right behaviour in production, but it makes
-    a *misconfigured* system look like a working one: the graph completes, every
-    answer is wrong, and nothing raises.
-
-    Holding an API key is therefore not evidence that the model is usable. This
-    probe makes one small, cheap call and reports the truth, so the caller can
-    choose the deterministic components deliberately instead of discovering the
-    problem in its output.
-
-    Returns:
-        ``(ok, reason)`` -- ``reason`` is empty on success, otherwise a short
-        explanation suitable for printing.
+    fails. That is right in production but it makes a *misconfigured* system
+    look like a working one: the graph completes, every answer is wrong, and
+    nothing raises. So the capabilities are established up front, deliberately,
+    rather than discovered in the output.
     """
     if not settings.has_credentials:
-        return False, f"no API key ({settings.api_key_env_var} is not set)"
+        return ProviderCapabilities(
+            chat_error=f"no API key ({settings.api_key_env_var} is not set)"
+        )
 
-    try:
-        model = LangChainModelProvider(settings).get_chat_model()
-    except Exception as exc:  # noqa: BLE001
-        return False, f"could not build the model: {type(exc).__name__}: {exc}"
+    provider = LangChainModelProvider(settings)
 
+    # --- 1. plain chat -------------------------------------------------- #
     try:
-        # Deliberately tiny: one token of output is enough to prove the
-        # endpoint, the key and the model name are all valid.
+        model = provider.get_chat_model()
         response = model.invoke(
             [("human", "Reply with the single word: ok")],
             config={"max_tokens": 5, "timeout": timeout},
         )
     except Exception as exc:  # noqa: BLE001
         detail = str(exc).strip().splitlines()[0][:160]
-        return False, f"{type(exc).__name__}: {detail}"
+        return ProviderCapabilities(chat_error=f"{type(exc).__name__}: {detail}")
 
-    content = getattr(response, "content", "")
-    if not str(content).strip():
-        return False, "the endpoint answered with empty content"
-    return True, ""
+    if not str(getattr(response, "content", "")).strip():
+        return ProviderCapabilities(chat_error="the endpoint answered with empty content")
+
+    # --- 2. structured output ------------------------------------------- #
+    # Probed with the real schema the triage agent uses, on a message whose
+    # correct answer is unambiguous -- so a gateway that accepts the request but
+    # returns nonsense is caught here too, not in front of a customer.
+    from ...domain.enums import Department
+    from ...domain.schemas import TriageDecision
+
+    try:
+        decision = provider.get_structured_model(TriageDecision, temperature=0.0).invoke(
+            [
+                ("system", "Classify the customer's message into a department."),
+                ("human", "I want a refund for my subscription payment."),
+            ]
+        )
+    except Exception as exc:  # noqa: BLE001
+        detail = str(exc).strip().splitlines()[0][:160]
+        return ProviderCapabilities(chat=True, structured_error=f"{type(exc).__name__}: {detail}")
+
+    if isinstance(decision, dict):
+        try:
+            decision = TriageDecision.model_validate(decision)
+        except Exception as exc:  # noqa: BLE001
+            return ProviderCapabilities(
+                chat=True, structured_error=f"returned an unusable object: {exc}"
+            )
+    if not isinstance(decision, TriageDecision):
+        return ProviderCapabilities(
+            chat=True,
+            structured_error=f"returned {type(decision).__name__}, not a TriageDecision",
+        )
+    if decision.department is not Department.BILLING:
+        # It produced valid JSON but classified a plain refund request wrongly.
+        return ProviderCapabilities(
+            chat=True,
+            structured_error=(
+                f"schema honoured but the answer was wrong "
+                f"(a refund request classified as {decision.department.value})"
+            ),
+        )
+
+    return ProviderCapabilities(chat=True, structured_output=True)
+
+
+def probe_provider(settings: Settings, *, timeout: int = 15) -> tuple[bool, str]:
+    """Back-compatible wrapper: is the endpoint usable for chat at all?"""
+    capabilities = probe_capabilities(settings, timeout=timeout)
+    return capabilities.chat, capabilities.chat_error

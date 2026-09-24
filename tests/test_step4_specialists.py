@@ -215,8 +215,13 @@ def test_general_agent_calls_no_tools(composer):
         ("How can I reset my password?", BillingAction.RETURN_TO_TRIAGE),
         ("my login is broken", BillingAction.RETURN_TO_TRIAGE),
         ("What payment methods do you accept?", BillingAction.ANSWER_DIRECTLY),
+        ("how much is the Pro plan?", BillingAction.ANSWER_DIRECTLY),
         # Mentions a fault AND money -> stays with billing, does not bounce.
-        ("I was charged twice but also the app crashes", BillingAction.ANSWER_DIRECTLY),
+        # It is a problem with this customer's own billing, so identify them
+        # first: the agent asks for an account id rather than guessing.
+        ("I was charged twice but also the app crashes", BillingAction.CHECK_SUBSCRIPTION),
+        # A billing complaint with no detail at all still needs an id.
+        ("I have a billing problem", BillingAction.CHECK_SUBSCRIPTION),
     ],
 )
 def test_rule_planner_decisions(message, expected):

@@ -22,6 +22,8 @@ Departments:
 - Billing    -> payments, invoices, charges, pricing, subscriptions, renewals,
                 cancellations, refunds, "I was charged twice", "my subscription
                 does not work", anything involving money or an account plan.
+                A bare "I have a billing problem", with no detail at all, is
+                still Billing -- the specialist will ask for the details.
 - Technical  -> bugs, crashes, error codes, installation and updates, sync
                 problems, passwords and sign-in, how-to and product questions.
 - General    -> greetings, thanks, small talk, questions about the company, and

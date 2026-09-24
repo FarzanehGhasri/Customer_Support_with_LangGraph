@@ -229,7 +229,12 @@ class ChatSession:
     def _trace(state: dict[str, Any], tools_before: int = 0) -> str:
         """One-line summary of how *this turn's* answer was produced."""
         tools = (state.get("tool_calls") or [])[tools_before:]
-        return (
-            f"{state.get('department', '?')} | {state.get('sentiment', '?')}"
-            f" | tools: {'; '.join(tools) if tools else 'none'}"
-        )
+        awaiting = state.get("awaiting") or ""
+        parts = [
+            str(state.get("department", "?")),
+            str(state.get("sentiment", "?")),
+            f"tools: {'; '.join(tools) if tools else 'none'}",
+        ]
+        if awaiting:
+            parts.append(f"awaiting: {awaiting}")
+        return " | ".join(parts)

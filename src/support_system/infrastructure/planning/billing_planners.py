@@ -49,10 +49,13 @@ class LLMBillingPlanner:
         return plan
 
 
-#: Words that mean the customer is asking about their plan/subscription.
+#: Words that mean the customer is asking about *their own* plan/subscription.
+#: Note "plan" is deliberately not here on its own: "how much is the Pro plan?"
+#: is a pricing question about the company, not a lookup of this customer's
+#: account, and answering it needs no id.
 SUBSCRIPTION_MARKERS = (
-    "subscription", "subscribe", "plan", "renew", "renewal", "expire", "expired",
-    "membership", "account status",
+    "subscription", "subscribe", "renew", "renewal", "expire", "expired",
+    "membership", "account status", "my plan", "plan is", "plan status",
 )
 #: Words that mean the customer wants money back.
 REFUND_MARKERS = ("refund", "money back", "reimburse", "chargeback", "charge back")
@@ -61,6 +64,15 @@ REFUND_MARKERS = ("refund", "money back", "reimburse", "chargeback", "charge bac
 MONEY_MARKERS = (
     "charge", "charged", "charges", "invoice", "billing", "bill", "payment",
     "paid", "price", "pricing", "money", "credit card", "transaction", "receipt",
+)
+#: Wording that marks an account-specific *problem* rather than a general
+#: question. "What payment methods do you accept?" needs no account; "I have a
+#: billing problem" does, so the first is answered directly and the second
+#: begins with asking who the customer is.
+PROBLEM_MARKERS = (
+    "problem", "issue", "wrong", "not working", "doesn't work", "does not work",
+    "didn't work", "error", "trouble", "twice", "double", "help me", "unexpected",
+    "overcharged", "why was i", "why am i", "i was", "i am being", "my account",
 )
 #: Words that mean this is not a billing matter at all.
 TECHNICAL_MARKERS = (
@@ -92,12 +104,23 @@ class RuleBasedBillingPlanner:
                 ),
             )
 
+        account = _ACCOUNT_RE.search(user_message)
+
         if any(m in text for m in SUBSCRIPTION_MARKERS):
-            account = _ACCOUNT_RE.search(user_message)
             return BillingPlan(
                 action=BillingAction.CHECK_SUBSCRIPTION,
                 argument=account.group(0) if account else "",
                 reasoning="Message is about the customer's subscription.",
+            )
+
+        # A billing *problem* with no further detail: we cannot say anything
+        # useful without knowing whose account it is, so start by looking the
+        # customer up. With no id in the message the agent asks for one.
+        if any(m in text for m in MONEY_MARKERS) and any(m in text for m in PROBLEM_MARKERS):
+            return BillingPlan(
+                action=BillingAction.CHECK_SUBSCRIPTION,
+                argument=account.group(0) if account else "",
+                reasoning="A problem with the customer's own billing; identify them first.",
             )
 
         # Only bounce back when the message is technical AND shows no sign of

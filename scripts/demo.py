@@ -106,11 +106,7 @@ def main() -> int:
     )
 
     print()
-    if app.offline:
-        print(f"MODE: OFFLINE — {app.offline_reason}")
-        print("      Answers come from the tools and the knowledge base, not from a model.")
-    else:
-        print(f"MODE: LIVE — {settings.provider}/{settings.model}")
+    print(f"MODE: {app.describe_mode()}")
     print(f"HITL: {app.hitl_mode}\n")
 
     runners = {1: scenario_1, 2: scenario_2, 3: scenario_3}

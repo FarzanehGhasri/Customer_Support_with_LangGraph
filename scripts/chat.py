@@ -83,6 +83,15 @@ def main() -> int:
         print(WARN(f"MODE: OFFLINE — {app.offline_reason}"))
         print(DIM("      Replies come from the tools and the knowledge base, not a model,"))
         print(DIM("      so they are unpolished but true. Routing and tools are identical."))
+    elif app.degraded:
+        # Say this loudly. Silently mis-routing every message while producing
+        # fluent prose is the worst possible failure: it looks like it works.
+        print(WARN(f"MODE: DEGRADED — {settings.provider}/{settings.model}"))
+        print(WARN(f"      This endpoint does not support with_structured_output:"))
+        print(WARN(f"      {app.offline_reason}"))
+        print(DIM("      Routing and sentiment use the deterministic classifiers;"))
+        print(DIM("      the model still writes the replies. Everything works, but"))
+        print(DIM("      the LLM is not doing the classifying."))
     else:
         print(f"MODE: LIVE — {settings.provider}/{settings.model}")
     print(DIM(f"      account id: {session.user_id or 'not set (the bot will ask)'}"

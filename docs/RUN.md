@@ -376,16 +376,43 @@ cp notebooks/customer_support_langgraph.ipynb notebooks/my_run.ipynb
 
 ---
 
-## تفاوت حالت LIVE و OFFLINE
+## سه حالت اجرا: LIVE / DEGRADED / OFFLINE
 
-| | OFFLINE | LIVE |
-|---|---|---|
-| تریاژ | کلیدواژه‌ای | LLM + `with_structured_output` |
-| تحلیل احساسات | کلیدواژه‌ای | LLM |
-| جستجوی RAG | TF-IDF | embeddings |
-| نگارش پاسخ | متن خام ابزار | LLM |
-| هزینه | صفر | چند سنت |
-| درستیِ مسیر گراف | ✅ یکسان | ✅ یکسان |
+| | OFFLINE | DEGRADED | LIVE |
+|---|---|---|---|
+| تریاژ | کلیدواژه‌ای | کلیدواژه‌ای | LLM + `with_structured_output` |
+| تحلیل احساسات | کلیدواژه‌ای | کلیدواژه‌ای | LLM |
+| نگارش پاسخ | متن خام ابزار | **LLM** | LLM |
+| جستجوی RAG | TF-IDF | TF-IDF | embeddings |
+| هزینه | صفر | کم | کم |
+| مسیریابی و ابزارها | ✅ درست | ✅ درست | ✅ درست |
 
-در هر دو حالت، مسیر گراف، ابزارها، توقف روی خشم و HITL **دقیقاً یکی** است؛
-فقط جملات در حالت آفلاین خام‌ترند.
+در هر سه حالت مسیر گراف، ابزارها، توقف روی خشم و HITL **یکی** است.
+
+### چرا DEGRADED وجود دارد؟
+
+ایجنت تریاژ و گاردریل به `with_structured_output` نیاز دارند. خیلی از
+gateway‌های سازگار با OpenAI، چت معمولی را جواب می‌دهند ولی JSON schema /
+function calling را **پشتیبانی نمی‌کنند**.
+
+چون همهٔ اجزای این پروژه موقع خطا بی‌صدا fallback می‌کنند، این حالت
+**نامرئی** بود: گراف کامل اجرا می‌شد، جواب‌ها روان بودند، ولی *هر* پیام
+`General` طبقه‌بندی می‌شد با confidence صفر — هیچ ابزاری اجرا نمی‌شد و مشتری
+عصبانی هرگز ارجاع داده نمی‌شد.
+
+حالا دو قابلیت **جداگانه** تست می‌شوند و اگر فقط چت کار کند، برنامه با هشدار
+واضح وارد حالت DEGRADED می‌شود:
+
+```
+MODE: DEGRADED — openai/gpt-4o-mini
+      This endpoint does not support with_structured_output:
+      BadRequestError: 'tools' unsupported
+      Routing and sentiment use the deterministic classifiers;
+      the model still writes the replies.
+```
+
+برای بررسی دقیق‌تر gateway خودتان:
+
+```bash
+python scripts/verify_provider.py
+```
