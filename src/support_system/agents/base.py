@@ -32,6 +32,9 @@ class BaseSupportNode(ABC):
 
     #: Node name used when registering on the graph. Subclasses must set it.
     node_name: str = "node"
+    #: How this agent introduces itself to the customer. The graph deals in
+    #: node names; a customer should hear a job title.
+    display_name: str = "Support"
 
     @property
     def name(self) -> str:
@@ -71,6 +74,64 @@ class BaseSupportNode(ABC):
         The notebook prints this to show the grader which tool actually ran.
         """
         return f"{tool}({argument}) -> {outcome}"
+
+    def has_spoken(self, state: SupportState) -> bool:
+        """True if this agent has already contributed to the transcript.
+
+        Read from the transcript rather than tracked in its own field: every
+        agent prefixes its lines with :meth:`say`, so the history already holds
+        the answer. One less piece of state to keep in step.
+        """
+        prefix = f"{self.name}:"
+        return any(line.startswith(prefix) for line in state.get("messages", []))
+
+    def introduction(self, state: SupportState) -> str:
+        """Self-introduction, or empty once this agent has already spoken.
+
+        The spec describes a company where reception hands the customer to a
+        specialist; a specialist that answers anonymously hides that. It is
+        said once per conversation -- repeating it every turn would read like a
+        machine, not a colleague.
+        """
+        if self.has_spoken(state):
+            return ""
+        return f"Hello, I am the {self.display_name}."
+
+    def intro_instruction(self, state: SupportState) -> str:
+        """Instruction prepended to the system prompt on an agent's first turn.
+
+        Returned as prompt text rather than fixed wording so the model writes
+        the introduction in the customer's own language and ties it to what
+        they actually asked.
+        """
+        if self.has_spoken(state):
+            return ""
+        return (
+            f"This is your first message to this customer. Begin by introducing "
+            f"yourself as the {self.display_name}, refer briefly to what they "
+            f"asked about, and then answer. One short sentence for the "
+            f"introduction, no more.\n\n"
+        )
+
+    def compose_reply(
+        self, composer, state: SupportState, prompt: str, message: str, *, fallback: str
+    ) -> str:
+        """Phrase a reply, introducing this agent on its first turn.
+
+        Lives here because all three specialists need exactly this and nothing
+        more. The composer is passed in rather than held on the base class:
+        triage and the guardrail phrase nothing, and should not carry a
+        dependency they never use.
+        """
+        intro = self.introduction(state)
+        if intro:
+            # A blank line before a multi-line answer; a space before a short
+            # one. Without this an introduction runs straight into a markdown
+            # heading -- "I am the Technical Support Specialist. ## Reset a..."
+            separator = "\n\n" if "\n" in fallback.strip() else " "
+            fallback = f"{intro}{separator}{fallback}"
+        return composer.compose(self.intro_instruction(state) + prompt, message,
+                                fallback=fallback)
 
     def current_message(self, state: SupportState) -> str:
         """The request being handled.

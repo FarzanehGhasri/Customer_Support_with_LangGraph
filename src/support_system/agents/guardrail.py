@@ -71,10 +71,17 @@ class SentimentGuardrail(BaseSupportNode):
                 ],
             }
 
+        # The customer-facing reply is the routing notice (when the department
+        # just changed) followed by the specialist's answer. Assembled here, in
+        # the one node every answer passes through, rather than in each agent.
+        notice = str(state.get("routing_notice", "") or "").strip()
+        final = f"{notice}\n\n{draft}".strip() if notice and draft else (draft or notice)
+
         return {
             "sentiment": sentiment.value,
             "escalated": False,
-            "final_response": draft,
+            "final_response": final,
+            "routing_notice": "",   # consumed; do not repeat it next turn
             "next_step": NextStep.FINISH.value,
             "messages": [
                 self.say(f"Sentiment {sentiment.value}; releasing the reply to the customer.")

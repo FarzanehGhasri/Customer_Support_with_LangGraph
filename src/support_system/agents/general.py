@@ -25,15 +25,17 @@ class GeneralAgent(BaseSupportNode):
     """Handles greetings, thanks and anything without a specialist."""
 
     node_name = "general"
+    display_name = "Front Desk agent"
 
     def __init__(self, composer: ResponseComposer) -> None:
         self._composer = composer
 
     def handle(self, state) -> Mapping[str, Any]:
         message = self.current_message(state)
-        prompt = GENERAL_ANSWER_PROMPT.format(user_message=message)
-        draft = self._composer.compose(
-            prompt,
+        draft = self.compose_reply(
+            self._composer,
+            state,
+            GENERAL_ANSWER_PROMPT.format(user_message=message),
             message,
             fallback="Thanks for getting in touch! How can I help you today?",
         )

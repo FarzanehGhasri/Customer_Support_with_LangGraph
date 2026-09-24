@@ -73,6 +73,7 @@ class BillingAgent(BaseSupportNode):
     """
 
     node_name = "billing"
+    display_name = "Billing Specialist"
 
     def __init__(
         self,
@@ -122,16 +123,17 @@ class BillingAgent(BaseSupportNode):
             user_id = self._resolve_account_id(plan.argument, state, message)
             if not user_id:
                 return self._ask_for(Awaiting.ACCOUNT_ID, plan.action, message, state)
-            return self._lookup_subscription(user_id, message)
+            return self._lookup_subscription(state, user_id, message)
 
         if plan.action is BillingAction.PROCESS_REFUND:
             transaction_id = self._resolve_transaction_id(plan.argument, state, message)
             if not transaction_id:
                 return self._ask_for(Awaiting.TRANSACTION_ID, plan.action, message, state)
-            return self._run_refund(transaction_id, message)
+            return self._run_refund(state, transaction_id, message)
 
         # ANSWER_DIRECTLY: no tool, and therefore no facts to quote.
         return self._finish(
+            state,
             message,
             (
                 "No account lookup was needed for this question. Answer from general "
@@ -158,6 +160,7 @@ class BillingAgent(BaseSupportNode):
                 return {
                     **self._clear_pending(),
                     "draft_response": self._compose(
+                        state,
                         BILLING_GAVE_UP_PROMPT.format(what=awaiting.label, user_message=message),
                         message,
                         fallback=(
@@ -169,18 +172,18 @@ class BillingAgent(BaseSupportNode):
                     "next_step": NextStep.GUARDRAIL.value,
                     "messages": [self.say("Gave up asking for the missing id.")],
                 }
-            return self._ask_again(awaiting, action, original, message, attempts)
+            return self._ask_again(state, awaiting, action, original, message, attempts)
 
         # We have a value. Look it up for real.
         if awaiting is Awaiting.ACCOUNT_ID:
-            return self._lookup_subscription(value, original, extra_clear=True)
-        return self._run_refund(value, original, extra_clear=True)
+            return self._lookup_subscription(state, value, original)
+        return self._run_refund(state, value, original)
 
     # ------------------------------------------------------------------ #
     # Tool execution
     # ------------------------------------------------------------------ #
     def _lookup_subscription(
-        self, user_id: str, message: str, *, extra_clear: bool = False
+        self, state, user_id: str, message: str
     ) -> Mapping[str, Any]:
         """Search the customer records, then answer according to what was found."""
         status = self._repository.get_status(user_id)
@@ -193,6 +196,7 @@ class BillingAgent(BaseSupportNode):
             # The id does not exist. Say so plainly -- never invent an account.
             logger.info("Account %r is not in the customer records.", user_id)
             draft = self._compose(
+                state,
                 BILLING_NOT_FOUND_PROMPT.format(
                     what=Awaiting.ACCOUNT_ID.label, value=user_id, user_message=message
                 ),
@@ -217,6 +221,7 @@ class BillingAgent(BaseSupportNode):
             }
 
         draft = self._compose(
+            state,
             BILLING_ANSWER_PROMPT.format(tool_result=status.summary(), user_message=message),
             message,
             fallback=status.summary(),
@@ -231,14 +236,13 @@ class BillingAgent(BaseSupportNode):
         }
         return update
 
-    def _run_refund(
-        self, transaction_id: str, message: str, *, extra_clear: bool = False
-    ) -> Mapping[str, Any]:
+    def _run_refund(self, state, transaction_id: str, message: str) -> Mapping[str, Any]:
         receipt = self._gateway.process_refund(transaction_id)
         tool_log = self.tool_log(
             "process_refund", transaction_id, "approved" if receipt.approved else "refused"
         )
         draft = self._compose(
+            state,
             BILLING_ANSWER_PROMPT.format(tool_result=receipt.summary(), user_message=message),
             message,
             fallback=receipt.summary(),
@@ -258,10 +262,13 @@ class BillingAgent(BaseSupportNode):
     def _ask_for(
         self, awaiting: Awaiting, action: BillingAction, message: str, state
     ) -> Mapping[str, Any]:
-        return self._ask_again(awaiting, action, message, message, int(state.get("ask_attempts", 0)))
+        return self._ask_again(
+            state, awaiting, action, message, message, int(state.get("ask_attempts", 0))
+        )
 
     def _ask_again(
         self,
+        state,
         awaiting: Awaiting,
         action: BillingAction,
         original_query: str,
@@ -271,6 +278,7 @@ class BillingAgent(BaseSupportNode):
         """Ask the customer for the missing id and remember that we asked."""
         logger.info("Asking the customer for their %s (attempt %d).", awaiting.value, attempts + 1)
         draft = self._compose(
+            state,
             BILLING_ASK_ID_PROMPT.format(
                 what=awaiting.label,
                 example=_EXAMPLES.get(awaiting, ""),
@@ -354,12 +362,13 @@ class BillingAgent(BaseSupportNode):
     # ------------------------------------------------------------------ #
     # Phrasing
     # ------------------------------------------------------------------ #
-    def _compose(self, prompt: str, message: str, *, fallback: str) -> str:
-        return self._composer.compose(prompt, message, fallback=fallback)
+    def _compose(self, state, prompt: str, message: str, *, fallback: str) -> str:
+        return self.compose_reply(self._composer, state, prompt, message, fallback=fallback)
 
-    def _finish(self, message: str, tool_result: str) -> Mapping[str, Any]:
+    def _finish(self, state, message: str, tool_result: str) -> Mapping[str, Any]:
         """Answer with no tool involved."""
         draft = self._compose(
+            state,
             BILLING_ANSWER_PROMPT.format(tool_result=tool_result, user_message=message),
             message,
             fallback=tool_result,

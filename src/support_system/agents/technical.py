@@ -39,6 +39,7 @@ class TechnicalAgent(BaseSupportNode):
     """
 
     node_name = "technical"
+    display_name = "Technical Support Specialist"
 
     def __init__(
         self,
@@ -65,10 +66,10 @@ class TechnicalAgent(BaseSupportNode):
         )
 
         if result.has_grounding:
-            draft = self._answer_from_documents(message, result)
+            draft = self._answer_from_documents(state, message, result)
         else:
             logger.info("No grounding for %r; admitting ignorance.", message)
-            draft = self._admit_ignorance(message)
+            draft = self._admit_ignorance(state, message)
 
         return {
             "draft_response": draft,
@@ -78,7 +79,7 @@ class TechnicalAgent(BaseSupportNode):
         }
 
     # ------------------------------------------------------------------ #
-    def _answer_from_documents(self, message: str, result) -> str:
+    def _answer_from_documents(self, state, message: str, result) -> str:
         """Answer from the retrieved passages.
 
         The fallback is the best passage itself rather than the whole context
@@ -88,11 +89,9 @@ class TechnicalAgent(BaseSupportNode):
         prompt = TECHNICAL_ANSWER_PROMPT.format(
             context=result.as_context(), user_message=message
         )
-        return self._composer.compose(
-            prompt, message, fallback=result.snippets[0].content
-        )
+        return self._compose(state, prompt, message, fallback=result.snippets[0].content)
 
-    def _admit_ignorance(self, message: str) -> str:
+    def _admit_ignorance(self, state, message: str) -> str:
         """Branch taken when nothing was retrieved.
 
         Note the fallback text: if even this call fails we still say "I don't
@@ -100,7 +99,8 @@ class TechnicalAgent(BaseSupportNode):
         successful answer by the guardrail downstream.
         """
         prompt = TECHNICAL_NO_ANSWER_PROMPT.format(user_message=message)
-        return self._composer.compose(
+        return self._compose(
+            state,
             prompt,
             message,
             fallback=(
@@ -108,3 +108,6 @@ class TechnicalAgent(BaseSupportNode):
                 "will pass your question to a human colleague."
             ),
         )
+
+    def _compose(self, state, prompt: str, message: str, *, fallback: str) -> str:
+        return self.compose_reply(self._composer, state, prompt, message, fallback=fallback)

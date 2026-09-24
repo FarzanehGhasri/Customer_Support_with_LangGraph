@@ -75,6 +75,12 @@ class SupportState(_SupportStateRequired, total=False):
     # "specialist rejects -> triage re-routes -> specialist rejects" infinite loop.
     triage_attempts: int
 
+    # Set by triage when the conversation changes department, e.g.
+    # "Connecting you to the Billing team." Shown to the customer ahead of the
+    # specialist's reply, so the hand-off between agents is visible rather than
+    # happening silently inside the graph.
+    routing_notice: str
+
     # --- multi-turn follow-up ------------------------------------------ #
     # Value of an :class:`Awaiting` member.  Non-empty means the last reply was
     # a question and the customer's next message is the answer to it.
@@ -117,6 +123,7 @@ def initial_state(
         escalated=False,
         tool_calls=[],
         triage_attempts=0,
+        routing_notice="",
         awaiting=Awaiting.NOTHING.value,
         pending_department="",
         pending_action="",
@@ -141,6 +148,7 @@ def turn_update(message: str, *, user_id: str = "") -> dict:
         "escalated": False,
         "draft_response": "",
         "final_response": "",
+        "routing_notice": "",
     }
     if user_id:
         update["user_id"] = user_id

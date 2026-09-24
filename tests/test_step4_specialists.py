@@ -178,7 +178,11 @@ def test_technical_uses_the_best_snippet_as_its_fallback(composer):
             )
 
     update = TechnicalAgent(_Retriever(), composer)(initial_state("q", "1"))
-    assert update["draft_response"] == "BEST ANSWER"
+    # The agent introduces itself on its first turn, so match on content rather
+    # than equality -- the point is that only the BEST snippet is used, not a
+    # dump of every candidate.
+    assert "BEST ANSWER" in update["draft_response"]
+    assert "worse answer" not in update["draft_response"]
 
 
 def test_technical_never_routes_back_to_triage(technical):

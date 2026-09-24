@@ -47,6 +47,14 @@ class TriageNode(BaseSupportNode):
     """
 
     node_name = "triage"
+    display_name = "Front Desk"
+
+    #: What the customer is told each department is called.
+    DEPARTMENT_NAMES = {
+        Department.BILLING: "Billing team",
+        Department.TECHNICAL: "Technical Support team",
+        Department.GENERAL: "Front Desk",
+    }
 
     def __init__(
         self,
@@ -73,6 +81,7 @@ class TriageNode(BaseSupportNode):
                 "department": Department.GENERAL.value,
                 "next_step": NextStep.GENERAL.value,
                 "triage_attempts": attempt,
+                "routing_notice": self._notice(Department.GENERAL, state),
                 "messages": [
                     self.say(
                         "Routed to the general queue after "
@@ -96,6 +105,7 @@ class TriageNode(BaseSupportNode):
             "department": department.value,
             "next_step": next_step.value,
             "triage_attempts": attempt,
+            "routing_notice": self._notice(department, state),
             "messages": [
                 self.say(
                     f"Classified as {department.value} "
@@ -105,3 +115,18 @@ class TriageNode(BaseSupportNode):
             # Keep the raw query handy for the specialist that runs next.
             "user_query": message,
         }
+
+    # ------------------------------------------------------------------ #
+    def _notice(self, department: Department, state: SupportState) -> str:
+        """Tell the customer who is about to take over -- but only on a change.
+
+        Announcing the same team on every turn would be noise; announcing a
+        *move* is what makes the hand-off between agents legible.
+        """
+        previous = str(state.get("department", "") or "")
+        if previous == department.value:
+            return ""
+        name = self.DEPARTMENT_NAMES.get(department, department.value)
+        if department is Department.GENERAL:
+            return f"Handling this at the {name}."
+        return f"Connecting you to the {name}."
