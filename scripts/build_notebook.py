@@ -2,9 +2,17 @@
 """
 Re-run the deliverable notebook and save it with fresh outputs.
 
-    python scripts/build_notebook.py              # execute in place
+    python scripts/build_notebook.py              # execute offline (default)
+    python scripts/build_notebook.py --live       # execute against the real model
     python scripts/build_notebook.py --html       # also export an .html copy
     python scripts/build_notebook.py --no-execute # export only, keep outputs as they are
+
+**Offline is the default.** The deliverable should be reproducible and should not
+depend on a gateway being reachable: a slow endpoint makes every cell appear to
+hang for the whole per-cell timeout, and a flaky one produces a notebook whose
+outputs differ every run. Offline exercises the same graph, the same routing and
+the same tools -- only the wording is templated instead of model-written. Pass
+`--live` when you specifically want model prose in the outputs.
 
 Why a script rather than "just run the cells": the deliverable must be an
 ``.ipynb`` whose outputs are *stored in the file*, so a grader sees the results
@@ -19,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -95,8 +104,52 @@ def _repo_relative(path: Path) -> str:
         return path.name
 
 
-def execute(path: Path, timeout: int) -> None:
-    print(f"executing {path.name} ...")
+def check_interpreter() -> int:
+    """Refuse to run with an interpreter that cannot import the project.
+
+    A very common Windows slip is losing the activated virtual environment, so
+    `python scripts/build_notebook.py` runs under the base conda install: a
+    different jupyter, without the project's dependencies. The failure that
+    produces is long and points nowhere near the cause.
+    """
+    missing = []
+    for module in ("jupyter", "nbformat", "nbconvert"):
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(module)
+
+    sys.path.insert(0, str(ROOT / "src"))
+    try:
+        __import__("support_system")
+    except ImportError:
+        missing.append("support_system (the project itself)")
+
+    if not missing:
+        return 0
+
+    print(f"FAILED: this interpreter cannot import: {', '.join(missing)}")
+    print(f"  interpreter: {sys.executable}")
+    print()
+    print("  Activate the project's virtual environment first:")
+    print("      Windows : .venv\\Scripts\\Activate.ps1")
+    print("      macOS/Linux: source .venv/bin/activate")
+    print("  then:")
+    print("      pip install -r requirements.txt")
+    print("      python scripts/build_notebook.py")
+    return 1
+
+
+def execute(path: Path, timeout: int, *, offline: bool) -> None:
+    mode = "OFFLINE (deterministic, no API calls)" if offline else "LIVE (real model calls)"
+    print(f"executing {path.name} -- {mode}")
+    if not offline:
+        print("  note: every cell that calls the model waits up to "
+              f"{timeout}s; a slow gateway will look like a hang.")
+
+    environment = dict(os.environ)
+    environment["SUPPORT_FORCE_OFFLINE"] = "1" if offline else "0"
+
     subprocess.run(
         [
             sys.executable, "-m", "jupyter", "nbconvert",
@@ -106,6 +159,7 @@ def execute(path: Path, timeout: int) -> None:
         ],
         check=True,
         cwd=path.parent,
+        env=environment,
     )
 
 
@@ -154,9 +208,15 @@ def main() -> int:
     parser.add_argument("--html", action="store_true", help="also write an .html copy")
     parser.add_argument("--pdf", action="store_true",
                         help="also write a .pdf copy (needs a LaTeX install)")
-    parser.add_argument("--timeout", type=int, default=600,
-                        help="per-cell timeout in seconds (default 600)")
+    parser.add_argument("--timeout", type=int, default=300,
+                        help="per-cell timeout in seconds (default 300)")
+    parser.add_argument("--live", action="store_true",
+                        help="run against the real model instead of offline")
     args = parser.parse_args()
+
+    status = check_interpreter()
+    if status:
+        return status
 
     path = args.notebook.resolve()
     if not path.is_file():
@@ -171,11 +231,18 @@ def main() -> int:
 
     if not args.no_execute:
         try:
-            execute(path, args.timeout)
+            execute(path, args.timeout, offline=not args.live)
         except subprocess.CalledProcessError as exc:
             print(f"\nnbconvert failed with exit code {exc.returncode}.")
             print("The notebook was left as it was; fix the failing cell and re-run.")
             return exc.returncode
+        except KeyboardInterrupt:
+            print("\n\nInterrupted. The notebook was not modified.")
+            if args.live:
+                print("A live run waits on the gateway for every model call.")
+                print("Build it offline instead -- same graph, same tools, no network:")
+                print("    python scripts/build_notebook.py")
+            return 130
 
     status = verify(path)
     if status:

@@ -118,3 +118,72 @@ def test_verify_rejects_a_notebook_containing_an_error(script, tmp_path, capsys)
 
 def test_verify_accepts_the_committed_notebook(script):
     assert script.verify(NOTEBOOK) == 0
+
+
+# --------------------------------------------------------------------------- #
+# Build modes -- regressions from a Windows run that hung and then failed
+# --------------------------------------------------------------------------- #
+
+
+def test_the_notebook_reads_the_offline_override_from_the_environment():
+    """`build_notebook.py` forces offline through an env var, not by editing a cell."""
+    source = NOTEBOOK.read_text(encoding="utf-8")
+    assert "SUPPORT_FORCE_OFFLINE" in source
+
+
+def test_execute_passes_the_offline_flag_to_the_subprocess(script, monkeypatch):
+    captured = {}
+
+    def _fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["env"] = kwargs.get("env", {})
+
+        class _Result:
+            returncode = 0
+
+        return _Result()
+
+    monkeypatch.setattr(script.subprocess, "run", _fake_run)
+
+    script.execute(NOTEBOOK, 300, offline=True)
+    assert captured["env"]["SUPPORT_FORCE_OFFLINE"] == "1"
+
+    script.execute(NOTEBOOK, 300, offline=False)
+    assert captured["env"]["SUPPORT_FORCE_OFFLINE"] == "0"
+
+
+def test_execute_passes_the_per_cell_timeout(script, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(
+        script.subprocess, "run",
+        lambda cmd, **kwargs: captured.setdefault("cmd", cmd) or type("R", (), {"returncode": 0})(),
+    )
+    script.execute(NOTEBOOK, 123, offline=True)
+    assert "--ExecutePreprocessor.timeout=123" in captured["cmd"]
+
+
+def test_the_interpreter_check_passes_in_this_environment(script):
+    assert script.check_interpreter() == 0
+
+
+def test_the_interpreter_check_reports_a_missing_dependency(script, monkeypatch, capsys):
+    """Losing the activated venv is the most common Windows slip."""
+    real_import = script.__builtins__["__import__"] if isinstance(
+        script.__builtins__, dict
+    ) else __import__
+
+    def _fake_import(name, *args, **kwargs):
+        if name == "nbconvert":
+            raise ImportError("no module named nbconvert")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setitem(__builtins__ if isinstance(__builtins__, dict)
+                        else __builtins__.__dict__, "__import__", _fake_import)
+    try:
+        assert script.check_interpreter() == 1
+    finally:
+        monkeypatch.undo()
+
+    out = capsys.readouterr().out
+    assert "nbconvert" in out
+    assert "Activate the project's virtual environment" in out

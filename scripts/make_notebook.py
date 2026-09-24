@@ -75,6 +75,7 @@ code('''
 # --- standard library ------------------------------------------------------
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -123,8 +124,11 @@ print("knowledge base:", settings.knowledge_base_dir)
 #   live     - the model classifies and phrases
 #   degraded - rules classify, the model phrases (gateway lacks JSON schema)
 #   offline  - no model at all
-# Set FORCE_OFFLINE = True for a reproducible, zero-cost run.
-FORCE_OFFLINE = False
+# Set FORCE_OFFLINE = True for a reproducible, zero-cost run. The environment
+# variable lets `scripts/build_notebook.py` force it without editing this cell,
+# which is how the committed outputs are produced: deterministic, free, and with
+# no network calls to hang on.
+FORCE_OFFLINE = os.getenv("SUPPORT_FORCE_OFFLINE", "").strip().lower() in {"1", "true", "yes"}
 
 app = build_application(settings, force_offline=FORCE_OFFLINE)
 print()

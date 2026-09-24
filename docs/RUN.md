@@ -240,10 +240,17 @@ jupyter notebook notebooks/customer_support_langgraph.ipynb
 اگر کد را تغییر دادید و می‌خواهید خروجی‌های نوت‌بوک به‌روز شوند:
 
 ```bash
-python scripts/build_notebook.py     # اجرا و ذخیرهٔ خروجی‌ها
-python scripts/make_notebook.py      # ساخت دوبارهٔ خود نوت‌بوک از روی کد
+python scripts/build_notebook.py            # اجرای آفلاین (پیش‌فرض) و ذخیرهٔ خروجی‌ها
+python scripts/build_notebook.py --live     # اجرا با مدل واقعی
+python scripts/make_notebook.py             # ساخت دوبارهٔ خود نوت‌بوک از روی کد
 python scripts/make_notebook.py --execute   # هر دو با هم
 ```
+
+> **پیش‌فرض آفلاین است، عمداً.** فایل تحویلی باید تکرارپذیر باشد و نباید به
+> در دسترس بودن gateway وابسته باشد: یک endpoint کند باعث می‌شود هر سلول تا
+> انتهای timeout معطل بماند و شبیه هنگ کردن به نظر برسد. حالت آفلاین **همان**
+> گراف، همان مسیریابی و همان ابزارها را اجرا می‌کند؛ فقط جملات به‌جای مدل،
+> قالبی هستند. اگر متن مدل را در خروجی می‌خواهید، `--live` بزنید.
 
 نوت‌بوک از روی `scripts/make_notebook.py` **تولید** می‌شود، نه دستی ویرایش.
 اگر می‌خواهید سلولی را عوض کنید، آن اسکریپت را ویرایش کنید و دوباره بسازید —
@@ -361,6 +368,31 @@ python scripts/demo.py          # بدون --offline
 | `Failed to reach https://mermaid.ink` | فقط روی تصویر گراف اثر دارد → VPN یا mermaid.live |
 | `verify_provider` در مرحلهٔ ۳ رد شد | این gateway از JSON schema پشتیبانی نمی‌کند → مدل دیگری امتحان کنید، یا آفلاین اجرا کنید |
 | `NotJSONError` / `JSONDecodeError` روی نوت‌بوک | فایل `.ipynb` خراب شده — معمولاً کانفلیکت گیت. ↓ بخش زیر |
+| `build_notebook.py` هنگ می‌کند | با `--live` اجرا شده و gateway کند است → بدون `--live` بزنید |
+| `cannot import: jupyter, nbformat...` | محیط مجازی فعال نیست → `.venv\Scripts\Activate.ps1` |
+| مسیرها `anaconda3` را نشان می‌دهند | پایتون anaconda در حال اجراست، نه `.venv` ↓ |
+| `Proactor event loop does not implement add_reader` | هشدار بی‌ضرر ویندوز؛ نادیده بگیرید |
+
+---
+
+## ویندوز: مشکل رایج محیط مجازی
+
+اگر در پیام خطا مسیرهایی مثل `C:\Users\...\anaconda3\...` دیدید، یعنی
+پایتونِ anaconda در حال اجراست نه `.venv` پروژه. نشانه‌اش در prompt است:
+
+```
+(.venv) (base) PS D:\...>     ← درست
+(base) PS D:\...>             ← اشتباه، venv فعال نیست
+```
+
+رفعش:
+
+```powershell
+.venv\Scripts\Activate.ps1
+python scripts/build_notebook.py
+```
+
+اسکریپت خودش هم این را تشخیص می‌دهد و قبل از هر کاری پیام واضح می‌دهد.
 
 ---
 
